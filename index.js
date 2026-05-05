@@ -1,73 +1,58 @@
-const express = require("express");
-const cors = require("cors");
-
-const app = express();
-
-// 🔥 LIBERA QUALQUER ACESSO (IMPORTANTE)
-app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"]
-}));
-
-app.use(express.json());
-
-let dados = [];
+<script>
+const API = "https://api-svs-production.up.railway.app";
 
 // 🔐 LOGIN
-app.post("/login", (req, res) => {
-    const { user } = req.body;
+async function login() {
+    const user = document.getElementById("user").value;
 
-    if (!user) {
-        return res.status(400).json({ erro: "Usuário não informado" });
-    }
-
-    res.json({ acesso: "membro" });
-});
-
-// 🔥 SALVAR VS
-app.post("/vs", (req, res) => {
-    const { user, vs } = req.body;
-
-    if (!user || !vs) {
-        return res.status(400).json({ erro: "Dados inválidos" });
-    }
-
-    const hoje = new Date().toLocaleDateString("pt-BR");
-
-    dados.push({
-        usuario: user,
-        vs: Number(vs),
-        data: hoje
-    });
-
-    console.log("📥 Recebido:", user, vs);
-
-    res.json({ status: "ok" });
-});
-
-// 🏆 RANKING
-app.get("/ranking", (req, res) => {
-    const hoje = new Date().toLocaleDateString("pt-BR");
-
-    const ranking = {};
-
-    dados
-        .filter(d => d.data === hoje)
-        .forEach(d => {
-            ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
+    try {
+        const res = await fetch(`${API}/login`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ user })
         });
 
-    const ordenado = Object.entries(ranking)
-        .map(([usuario, total]) => ({ usuario, total }))
-        .sort((a, b) => b.total - a.total);
+        if (!res.ok) throw new Error("Erro na API");
 
-    res.json(ordenado);
-});
+        const data = await res.json();
 
-// 🚀 START
-const PORT = process.env.PORT || 3000;
+        console.log("LOGIN:", data);
 
-app.listen(PORT, () => {
-    console.log("🔥 API rodando na porta", PORT);
-});
+        document.getElementById("login").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+
+        // 🔥 CHAMADA CORRETA
+        carregarRanking();
+
+    } catch (err) {
+        console.error(err);
+        alert("Erro ao conectar com a API");
+    }
+}
+
+// 🏆 RANKING
+async function carregarRanking() {
+    try {
+        const res = await fetch(`${API}/ranking`);
+        const data = await res.json();
+
+        let html = "";
+
+        if (data.length === 0) {
+            html = "<p>Sem dados hoje</p>";
+        } else {
+            data.forEach((p, i) => {
+                html += `<p>${i + 1}º ${p.usuario} - ${p.total}M</p>`;
+            });
+        }
+
+        document.getElementById("ranking").innerHTML = html;
+
+    } catch (err) {
+        console.error(err);
+        alert("Erro ao carregar ranking");
+    }
+}
+</script>
