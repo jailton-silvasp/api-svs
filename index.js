@@ -2,137 +2,110 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-let dados = [];
+let registros = [];
 
-// =========================================
-// 🔐 LOGIN LÍDERES
-// =========================================
-const lideres = ["Jailton", "『PRΞDΛDΩR』"];
+// 🔐 Lista de líderes (controle de acesso)
+const lideres = [
+    "『PRΞDΛDΩR』",
+    "SEU_NICK_AQUI"
+];
 
-app.post("/login", (req, res) => {
-    const { user } = req.body;
-
-    if (lideres.includes(user)) {
-        return res.json({ acesso: true });
-    }
-
-    res.json({ acesso: false });
-});
-
-
-// =========================================
-// 🔥 REGISTRO VS
-// =========================================
+// 📌 REGISTRO DE VS
 app.post("/vs", (req, res) => {
-    const usuario = req.body.user || req.body.usuario;
-    const vs = Number(req.body.vs);
+    const { user, vs } = req.body;
 
-    if (!usuario || !vs) {
-        return res.status(400).json({ erro: "Dados inválidos" });
+    if (!user || !vs) {
+        return res.status(400).json({ error: "Dados inválidos" });
     }
 
-    const hoje = new Date().toLocaleDateString("pt-BR");
+    const hoje = new Date().toISOString().split("T")[0];
 
-    dados.push({
-        usuario,
-        vs,
-        data: hoje,
-        timestamp: Date.now()
+    registros.push({
+        usuario: user,
+        vs: parseFloat(vs),
+        data: hoje
     });
-
-    console.log("🔥 Novo registro:", usuario, vs);
 
     res.json({ status: "ok" });
 });
 
+// 📊 RANKING TOTAL
+app.get("/ranking", (req, res) => {
+    const ranking = {};
 
-// =========================================
-// 📅 HISTÓRICO POR PLAYER
-// =========================================
+    registros.forEach(r => {
+        if (!ranking[r.usuario]) ranking[r.usuario] = 0;
+        ranking[r.usuario] += r.vs;
+    });
+
+    const resultado = Object.keys(ranking).map(u => ({
+        usuario: u,
+        total: ranking[u]
+    }));
+
+    resultado.sort((a, b) => b.total - a.total);
+
+    res.json(resultado);
+});
+
+// 📅 HISTÓRICO POR DIA
 app.get("/historico", (req, res) => {
-    const { usuario } = req.query;
+    res.json(registros);
+});
 
-    if (!usuario) {
-        return res.json([]);
+// 🏆 RANKING SEMANAL
+app.get("/ranking-semanal", (req, res) => {
+    const semana = {};
+
+    registros.forEach(r => {
+        if (!semana[r.usuario]) semana[r.usuario] = 0;
+        semana[r.usuario] += r.vs;
+    });
+
+    const resultado = Object.keys(semana).map(u => ({
+        usuario: u,
+        total: semana[u]
+    }));
+
+    resultado.sort((a, b) => b.total - a.total);
+
+    res.json(resultado);
+});
+
+// 🥇 MVP
+app.get("/mvp", (req, res) => {
+    const ranking = {};
+
+    registros.forEach(r => {
+        if (!ranking[r.usuario]) ranking[r.usuario] = 0;
+        ranking[r.usuario] += r.vs;
+    });
+
+    let mvp = null;
+    let maior = 0;
+
+    for (let user in ranking) {
+        if (ranking[user] > maior) {
+            maior = ranking[user];
+            mvp = user;
+        }
     }
 
-    const historico = dados
-        .filter(d => d.usuario === usuario)
-        .sort((a, b) => a.timestamp - b.timestamp);
-
-    res.json(historico);
+    res.json({ usuario: mvp, total: maior });
 });
 
+// 🔐 LOGIN
+app.post("/login", (req, res) => {
+    const { user } = req.body;
 
-// =========================================
-// 🏆 RANKING DIÁRIO
-// =========================================
-app.get("/ranking", (req, res) => {
-    const hoje = new Date().toLocaleDateString("pt-BR");
+    if (lideres.includes(user)) {
+        return res.json({ acesso: "lider" });
+    }
 
-    const ranking = {};
-
-    dados
-        .filter(d => d.data === hoje)
-        .forEach(d => {
-            ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
-        });
-
-    const resultado = Object.entries(ranking)
-        .map(([usuario, total]) => ({ usuario, total }))
-        .sort((a, b) => b.total - a.total);
-
-    res.json(resultado);
+    return res.json({ acesso: "membro" });
 });
 
-
-// =========================================
-// 🏆 RANKING SEMANAL
-// =========================================
-app.get("/ranking-semanal", (req, res) => {
-
-    const ranking = {};
-
-    dados.forEach(d => {
-        ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
-    });
-
-    const resultado = Object.entries(ranking)
-        .map(([usuario, total]) => ({ usuario, total }))
-        .sort((a, b) => b.total - a.total);
-
-    res.json(resultado);
-});
-
-
-// =========================================
-// 🥇 MVP AUTOMÁTICO
-// =========================================
-app.get("/mvp", (req, res) => {
-
-    const ranking = {};
-
-    dados.forEach(d => {
-        ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
-    });
-
-    const top = Object.entries(ranking)
-        .map(([usuario, total]) => ({ usuario, total }))
-        .sort((a, b) => b.total - a.total)[0];
-
-    res.json(top || {});
-});
-
-
-// =========================================
-// 🚀 START
-// =========================================
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-    console.log("🔥 API GOD+ rodando");
-});
+app.listen(3000, () => console.log("API rodando"));
