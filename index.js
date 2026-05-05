@@ -1,47 +1,79 @@
 const express = require("express");
+const cors = require("cors");
+
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
-let dados = [];
+// =======================
+// USUÁRIO FIXO (LOGIN)
+// =======================
+const USER_FIXO = {
+  username: "Jailton",
+  password: "1234"
+};
 
-// 🔥 SALVAR VS
-app.post("/vs", (req, res) => {
-    const { usuario, vs } = req.body;
+// =======================
+// REGISTER (SIMULADO)
+// =======================
+let usuarios = [];
 
-    const hoje = new Date().toLocaleDateString("pt-BR");
+// ROTA REGISTER
+app.post("/register", (req, res) => {
+  const { username, password } = req.body;
 
-    dados.push({
-        usuario,
-        vs: Number(vs),
-        data: hoje
+  if (!username || !password) {
+    return res.status(400).json({ message: "Usuário e senha obrigatórios" });
+  }
+
+  const existe = usuarios.find(u => u.username === username);
+
+  if (existe || username === USER_FIXO.username) {
+    return res.status(400).json({ message: "Usuário já existe" });
+  }
+
+  usuarios.push({ username, password });
+
+  return res.json({ message: "Usuário criado com sucesso" });
+});
+
+// =======================
+// LOGIN
+// =======================
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+
+  // usuário fixo (Jailton)
+  if (
+    username === USER_FIXO.username &&
+    password === USER_FIXO.password
+  ) {
+    return res.json({
+      message: "Login realizado com sucesso",
+      user: username
     });
+  }
 
-    res.send({ status: "ok" });
+  // usuários cadastrados via register
+  const user = usuarios.find(
+    u => u.username === username && u.password === password
+  );
+
+  if (user) {
+    return res.json({
+      message: "Login realizado com sucesso",
+      user: username
+    });
+  }
+
+  return res.status(401).json({ message: "Usuário ou senha inválidos" });
 });
 
-// 🏆 RANKING
-app.get("/ranking", (req, res) => {
-    const hoje = new Date().toLocaleDateString("pt-BR");
-
-    const ranking = {};
-
-    dados
-        .filter(d => d.data === hoje)
-        .forEach(d => {
-            ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
-        });
-
-    const ordenado = Object.entries(ranking)
-        .map(([usuario, total]) => ({ usuario, total }))
-        .sort((a, b) => b.total - a.total);
-
-    res.json(ordenado);
-});
-
-// 🚀 START
-const PORT = process.env.PORT || 3000;
-
+// =======================
+// START SERVER
+// =======================
+const PORT = 3000;
 app.listen(PORT, () => {
-    console.log("API rodando na porta", PORT);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
