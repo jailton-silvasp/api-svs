@@ -10,6 +10,7 @@ app.use(express.json());
 const lideres = {
     "Jailton": "1234",
     "Predador": "1234"
+    "Anny": "12345"
 };
 
 let dados = [];
