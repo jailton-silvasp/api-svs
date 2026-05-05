@@ -1,58 +1,90 @@
-<script>
-const API = "https://api-svs-production.up.railway.app";
+const express = require("express");
+const cors = require("cors");
 
-// 🔐 LOGIN
-async function login() {
-    const user = document.getElementById("user").value;
+const app = express();
 
-    try {
-        const res = await fetch(`${API}/login`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ user })
+app.use(cors());
+app.use(express.json());
+
+let dados = [];
+
+// 🔥 SALVAR VS
+app.post("/vs", (req, res) => {
+    const usuario = req.body.user || req.body.usuario;
+    const vs = Number(req.body.vs);
+
+    const hoje = new Date().toLocaleDateString("pt-BR");
+
+    if (!usuario || !vs) {
+        return res.status(400).send({ erro: "Dados inválidos" });
+    }
+
+    dados.push({
+        usuario,
+        vs,
+        data: hoje
+    });
+
+    console.log("📥 SALVO:", usuario, vs);
+
+    res.send({ status: "ok" });
+});
+
+// 🏆 RANKING DO DIA
+app.get("/ranking", (req, res) => {
+    const hoje = new Date().toLocaleDateString("pt-BR");
+
+    const ranking = {};
+
+    dados
+        .filter(d => d.data === hoje)
+        .forEach(d => {
+            ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
         });
 
-        if (!res.ok) throw new Error("Erro na API");
+    const ordenado = Object.entries(ranking)
+        .map(([usuario, total]) => ({ usuario, total }))
+        .sort((a, b) => b.total - a.total);
 
-        const data = await res.json();
+    res.json(ordenado);
+});
 
-        console.log("LOGIN:", data);
+// 📅 HISTÓRICO POR DIA
+app.get("/historico", (req, res) => {
+    const agrupado = {};
 
-        document.getElementById("login").style.display = "none";
-        document.getElementById("dashboard").style.display = "block";
-
-        // 🔥 CHAMADA CORRETA
-        carregarRanking();
-
-    } catch (err) {
-        console.error(err);
-        alert("Erro ao conectar com a API");
-    }
-}
-
-// 🏆 RANKING
-async function carregarRanking() {
-    try {
-        const res = await fetch(`${API}/ranking`);
-        const data = await res.json();
-
-        let html = "";
-
-        if (data.length === 0) {
-            html = "<p>Sem dados hoje</p>";
-        } else {
-            data.forEach((p, i) => {
-                html += `<p>${i + 1}º ${p.usuario} - ${p.total}M</p>`;
-            });
+    dados.forEach(d => {
+        if (!agrupado[d.data]) {
+            agrupado[d.data] = [];
         }
+        agrupado[d.data].push(d);
+    });
 
-        document.getElementById("ranking").innerHTML = html;
+    res.json(agrupado);
+});
 
-    } catch (err) {
-        console.error(err);
-        alert("Erro ao carregar ranking");
-    }
-}
-</script>
+// 🥇 MVP DO DIA
+app.get("/mvp", (req, res) => {
+    const hoje = new Date().toLocaleDateString("pt-BR");
+
+    const ranking = {};
+
+    dados
+        .filter(d => d.data === hoje)
+        .forEach(d => {
+            ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
+        });
+
+    const ordenado = Object.entries(ranking)
+        .map(([usuario, total]) => ({ usuario, total }))
+        .sort((a, b) => b.total - a.total);
+
+    res.json(ordenado[0] || null);
+});
+
+// 🚀 START
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log("🔥 API GOD rodando na porta", PORT);
+});
