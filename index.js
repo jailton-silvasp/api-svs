@@ -6,26 +6,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use(express.json());
-
 let dados = [];
 
-// 🔥 SALVAR VS
+// =========================================
+// 🔥 SALVAR VS (CORRIGIDO)
+// =========================================
 app.post("/vs", (req, res) => {
-    const { usuario, vs } = req.body;
+    // 🔥 ACEITA user OU usuario
+    const usuario = req.body.user || req.body.usuario;
+    const vs = req.body.vs;
+
+    if (!usuario || !vs) {
+        return res.status(400).json({ error: "Dados inválidos" });
+    }
 
     const hoje = new Date().toLocaleDateString("pt-BR");
 
     dados.push({
-        usuario,
+        usuario: usuario,
         vs: Number(vs),
         data: hoje
     });
 
-    res.send({ status: "ok" });
+    console.log("📥 Novo registro:", usuario, vs);
+
+    res.json({ status: "ok" });
 });
 
-// 🏆 RANKING
+
+// =========================================
+// 🏆 RANKING (SEM BUG)
+// =========================================
 app.get("/ranking", (req, res) => {
     const hoje = new Date().toLocaleDateString("pt-BR");
 
@@ -34,6 +45,8 @@ app.get("/ranking", (req, res) => {
     dados
         .filter(d => d.data === hoje)
         .forEach(d => {
+            if (!d.usuario) return; // 🔥 evita undefined
+
             ranking[d.usuario] = (ranking[d.usuario] || 0) + d.vs;
         });
 
@@ -44,9 +57,20 @@ app.get("/ranking", (req, res) => {
     res.json(ordenado);
 });
 
+
+// =========================================
+// 🧪 DEBUG OPCIONAL (VER DADOS BRUTOS)
+// =========================================
+app.get("/dados", (req, res) => {
+    res.json(dados);
+});
+
+
+// =========================================
 // 🚀 START
+// =========================================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log("API rodando na porta", PORT);
+    console.log("🔥 API rodando na porta", PORT);
 });
