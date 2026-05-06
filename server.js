@@ -1,104 +1,107 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
-require("dotenv").config();
-
-const db = require("./db");
+const jwt = require("jsonwebtoken");
+const { Pool } = require("pg");
 
 const app = express();
-
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
-// ===============================
-// 🔐 MIDDLEWARE DE AUTENTICAÇÃO
-// ===============================
-function authMiddleware(req, res, next) {
-  const token = req.headers.authorization;
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
 
-  if (!token) {
-    return res.status(401).json({ error: "Token não fornecido" });
-  }
+const SECRET = "svs_super_secret";
 
-  try {
-    const decoded = jwt.verify(token.split(" ")[1], process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: "Token inválido" });
-  }
-}
-
-// ===============================
-// 👤 REGISTRAR USUÁRIO
-// ===============================
+// ================= LOGIN =================
 app.post("/register", async (req, res) => {
-  const { username, password, role } = req.body;
-
-  try {
+    const { username, password } = req.body;
     const hash = await bcrypt.hash(password, 10);
 
-    await db.query(
-      "INSERT INTO users (username, password, role) VALUES ($1, $2, $3)",
-      [username, hash, role || "user"]
+    await pool.query(
+        "INSERT INTO users (username, password) VALUES ($1, $2)",
+        [username, hash]
     );
 
-    res.json({ message: "Usuário criado com sucesso" });
-  } catch (err) {
-    res.status(500).json({ error: "Erro ao criar usuário", detail: err.message });
-  }
+    res.send({ ok: true });
 });
 
-// ===============================
-// 🔐 LOGIN
-// ===============================
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+    const { username, password } = req.body;
 
-  try {
-    const result = await db.query(
-      "SELECT * FROM users WHERE username = $1",
-      [username]
+    const user = await pool.query(
+        "SELECT * FROM users WHERE username=$1",
+        [username]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Usuário não encontrado" });
-    }
+    if (!user.rows.length) return res.status(401).send("User not found");
 
-    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.rows[0].password);
+    if (!valid) return res.status(401).send("Invalid password");
 
-    const match = await bcrypt.compare(password, user.password);
+    const token = jwt.sign({ username }, SECRET);
+    res.send({ token });
+});
 
-    if (!match) {
-      return res.status(401).json({ error: "Senha incorreta" });
-    }
+// ================= VS =================
+app.post("/vs", async (req, res) => {
+    const { usuario, discord_id, valor } = req.body;
 
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+    await pool.query(
+        "INSERT INTO vs_registros (usuario, discord_id, valor) VALUES ($1,$2,$3)",
+        [usuario, discord_id, valor]
     );
 
-    res.json({ token });
-  } catch (err) {
-    res.status(500).json({ error: "Erro no login" });
-  }
+    res.send({ ok: true });
 });
 
-// ===============================
-// 🔒 ROTA PROTEGIDA (TESTE)
-// ===============================
-app.get("/dashboard", authMiddleware, async (req, res) => {
-  res.json({
-    message: "Acesso liberado!",
-    user: req.user
-  });
+// ================= F1 =================
+app.post("/f1", async (req, res) => {
+    const { usuario, discord_id, valor, semana } = req.body;
+
+    await pool.query(
+        "INSERT INTO f1_registros (usuario, discord_id, valor, semana) VALUES ($1,$2,$3,$4)",
+        [usuario, discord_id, valor, semana]
+    );
+
+    res.send({ ok: true });
 });
 
-// ===============================
-// 🚀 START SERVER
-// ===============================
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Servidor rodando...");
+// ================= RANKING VS =================
+app.get("/ranking", async (req, res) => {
+    const { data } = req.query;
+
+    const result = await pool.query(`
+        SELECT usuario, SUM(valor) as total
+        FROM vs_registros
+        WHERE data = $1
+        GROUP BY usuario
+        ORDER BY total DESC
+    `, [data]);
+
+    res.json(result.rows);
+});
+
+// ================= RANKING F1 =================
+app.get("/ranking-f1", async (req, res) => {
+    const { semana } = req.query;
+
+    const result = await pool.query(`
+        SELECT usuario, SUM(valor) as total
+        FROM f1_registros
+        WHERE semana = $1
+        GROUP BY usuario
+        ORDER BY total DESC
+    `, [semana]);
+
+    res.json(result.rows);
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log("API rodando...");
 });
