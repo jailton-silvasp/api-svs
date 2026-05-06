@@ -9,10 +9,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+const { Pool } = require('pg')
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-});
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+})
 
 const SECRET = "svs_super_secret";
 
