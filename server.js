@@ -1,4 +1,4 @@
-require("dotenv").config();
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const { Pool } = require('pg')
@@ -12,94 +12,99 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-const SECRET = "svs_super_secret";
+// 🔥 TESTE API
+app.get('/', (req, res) => {
+  res.send('API rodando')
+})
 
-// ================= LOGIN =================
-app.post("/register", async (req, res) => {
-    const { username, password } = req.body;
-    const hash = await bcrypt.hash(password, 10);
-
-    await pool.query(
-        "INSERT INTO users (username, password) VALUES ($1, $2)",
-        [username, hash]
-    );
-
-    res.send({ ok: true });
-});
-
-app.post("/login", async (req, res) => {
-    const { username, password } = req.body;
-
-    const user = await pool.query(
-        "SELECT * FROM users WHERE username=$1",
-        [username]
-    );
-
-    if (!user.rows.length) return res.status(401).send("User not found");
-
-    const valid = await bcrypt.compare(password, user.rows[0].password);
-    if (!valid) return res.status(401).send("Invalid password");
-
-    const token = jwt.sign({ username }, SECRET);
-    res.send({ token });
-});
-
-// ================= VS =================
-app.post("/vs", async (req, res) => {
-    const { usuario, discord_id, valor } = req.body;
+/*
+========================================
+🔥 VS - SALVAR
+========================================
+*/
+app.post('/vs', async (req, res) => {
+  try {
+    const { player_name, points } = req.body
 
     await pool.query(
-        "INSERT INTO vs_registros (usuario, discord_id, valor) VALUES ($1,$2,$3)",
-        [usuario, discord_id, valor]
-    );
+      `INSERT INTO vs_registros (player_name, points)
+       VALUES ($1, $2)`,
+      [player_name, points]
+    )
 
-    res.send({ ok: true });
-});
+    res.json({ success: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erro ao salvar VS' })
+  }
+})
 
-// ================= F1 =================
-app.post("/f1", async (req, res) => {
-    const { usuario, discord_id, valor, semana } = req.body;
-
-    await pool.query(
-        "INSERT INTO f1_registros (usuario, discord_id, valor, semana) VALUES ($1,$2,$3,$4)",
-        [usuario, discord_id, valor, semana]
-    );
-
-    res.send({ ok: true });
-});
-
-// ================= RANKING VS =================
-app.get("/ranking", async (req, res) => {
-    const { data } = req.query;
-
+/*
+========================================
+🔥 VS - RANKING (HOJE)
+========================================
+*/
+app.get('/ranking', async (req, res) => {
+  try {
     const result = await pool.query(`
-        SELECT usuario, SUM(valor) as total
-        FROM vs_registros
-        WHERE data = $1
-        GROUP BY usuario
-        ORDER BY total DESC
-    `, [data]);
+      SELECT player_name, MAX(points) as points
+      FROM vs_registros
+      WHERE DATE(created_at) = CURRENT_DATE
+      GROUP BY player_name
+      ORDER BY points DESC
+      LIMIT 10
+    `)
 
-    res.json(result.rows);
-});
+    res.json(result.rows)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erro no ranking' })
+  }
+})
 
-// ================= RANKING F1 =================
-app.get("/ranking-f1", async (req, res) => {
-    const { semana } = req.query;
+/*
+========================================
+🔥 F1 - SALVAR
+========================================
+*/
+app.post('/f1', async (req, res) => {
+  try {
+    const { player_name, points } = req.body
 
+    await pool.query(
+      `INSERT INTO f1_registros (player_name, points)
+       VALUES ($1, $2)`,
+      [player_name, points]
+    )
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erro ao salvar F1' })
+  }
+})
+
+/*
+========================================
+🔥 F1 - SEMANAL
+========================================
+*/
+app.get('/f1-semanal', async (req, res) => {
+  try {
     const result = await pool.query(`
-        SELECT usuario, SUM(valor) as total
-        FROM f1_registros
-        WHERE semana = $1
-        GROUP BY usuario
-        ORDER BY total DESC
-    `, [semana]);
+      SELECT player_name, SUM(points) as points
+      FROM f1_registros
+      WHERE DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE)
+      GROUP BY player_name
+      ORDER BY points DESC
+    `)
 
-    res.json(result.rows);
-});
+    res.json(result.rows)
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Erro F1 semanal' })
+  }
+})
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-    console.log("API rodando...");
-});
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`))
