@@ -24,7 +24,8 @@ app.post("/vs", async (req, res) => {
     const { usuario, discord_id, valor } = req.body;
 
     await pool.query(
-      "INSERT INTO vs_registros (usuario, discord_id, valor, created_at) VALUES ($1, $2, $3, NOW())",
+      `INSERT INTO vs_registros (usuario, discord_id, valor, created_at)
+       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
       [usuario, discord_id, valor]
     );
 
@@ -35,7 +36,7 @@ app.post("/vs", async (req, res) => {
   }
 });
 
-// 🔥 RANKING VS (DIÁRIO)
+// 🔥 RANKING VS (CORRIGIDO FUSO BRASIL)
 app.get("/ranking", async (req, res) => {
   try {
     const period = req.query.period;
@@ -46,7 +47,9 @@ app.get("/ranking", async (req, res) => {
     `;
 
     if (period === "day") {
-      query += ` WHERE created_at >= CURRENT_DATE `;
+      query += `
+        WHERE created_at::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+      `;
     }
 
     query += `
@@ -72,7 +75,8 @@ app.post("/f1", async (req, res) => {
     const { usuario, discord_id, valor } = req.body;
 
     await pool.query(
-      "INSERT INTO f1_registros (usuario, discord_id, valor, created_at) VALUES ($1, $2, $3, NOW())",
+      `INSERT INTO f1_registros (usuario, discord_id, valor, created_at)
+       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
       [usuario, discord_id, valor]
     );
 
@@ -83,7 +87,7 @@ app.post("/f1", async (req, res) => {
   }
 });
 
-// 🔥 RANKING F1 (SEMANAL - SEXTA RESET NATURAL)
+// 🔥 RANKING F1 (SEMANAL CORRIGIDO)
 app.get("/ranking-f1", async (req, res) => {
   try {
     const period = req.query.period;
@@ -94,7 +98,9 @@ app.get("/ranking-f1", async (req, res) => {
     `;
 
     if (period === "week") {
-      query += ` WHERE created_at >= date_trunc('week', CURRENT_DATE) `;
+      query += `
+        WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      `;
     }
 
     query += `
