@@ -52,46 +52,51 @@ app.post("/vs", async (req, res) => {
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
-    const period = req.query.period || "day";
+    const period = req.query.period;
 
-    let filtro = "";
+    let query = `
+      SELECT usuario, discord_id, SUM(valor) as total
+      FROM vs_registros
+    `;
 
     if (period === "day") {
-      filtro = `
+      query += `
         WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
       `;
     }
 
-    const result = await pool.query(`
-      SELECT 
-        usuario,
-        discord_id,
-        SUM(valor::numeric) as total
-      FROM vs_registros
-      ${filtro}
+    query += `
       GROUP BY usuario, discord_id
       ORDER BY total DESC
-    `);
+    `;
 
-    const formatar = (valor) => {
+    const result = await pool.query(query);
+
+    // 🔥 FUNÇÃO DE FORMATAÇÃO
+    const formatarValor = (valor) => {
       valor = Number(valor);
 
-      if (valor >= 1_000_000_000) return (valor / 1e9).toFixed(2) + "G";
-      if (valor >= 1_000_000) return (valor / 1e6).toFixed(2) + "M";
-      if (valor >= 1_000) return (valor / 1e3).toFixed(2) + "K";
-      return valor.toFixed(2);
+      if (valor >= 1_000_000_000) {
+        return (valor / 1_000_000_000).toFixed(2) + "G";
+      } else if (valor >= 1_000_000) {
+        return (valor / 1_000_000).toFixed(2) + "M";
+      } else if (valor >= 1_000) {
+        return (valor / 1_000).toFixed(2) + "K";
+      } else {
+        return valor.toFixed(2);
+      }
     };
 
-    const ranking = result.rows.map(r => ({
-      usuario: r.usuario,
-      discord_id: r.discord_id,
-      total: formatar(r.total)
+    const rankingFormatado = result.rows.map((row) => ({
+      usuario: row.usuario,
+      discord_id: row.discord_id,
+      total: formatarValor(row.total) // 🔥 AQUI ESTÁ O SEGREDO
     }));
 
-    res.json(ranking);
+    res.json(rankingFormatado);
 
   } catch (err) {
-    console.error(err);
+    console.error("Erro no ranking:", err);
     res.status(500).json({ erro: "Erro ao buscar ranking" });
   }
 });
