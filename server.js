@@ -77,7 +77,7 @@ app.post("/f1", async (req, res) => {
 app.get("/dashboard/resumo", async (req, res) => {
   try {
     const hoje = await pool.query(`
-      SELECT COUNT(*) FROM vs_registros
+      SELECT COUNT(*) as total FROM vs_registros
       WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
     `);
 
@@ -92,14 +92,14 @@ app.get("/dashboard/resumo", async (req, res) => {
     `);
 
     const jogadores = await pool.query(`
-      SELECT COUNT(DISTINCT usuario) FROM vs_registros
+      SELECT COUNT(DISTINCT usuario) as total FROM vs_registros
     `);
 
     res.json({
-      vs_hoje: hoje.rows[0].count,
-      vs_semana: semanaVS.rows[0].total,
-      f1_semana: semanaF1.rows[0].total,
-      jogadores: jogadores.rows[0].count
+      vs_hoje: Number(hoje.rows[0].total),
+      vs_semana: Number(semanaVS.rows[0].total),
+      f1_semana: Number(semanaF1.rows[0].total),
+      jogadores: Number(jogadores.rows[0].total)
     });
 
   } catch (err) {
@@ -115,14 +115,19 @@ app.get("/dashboard/resumo", async (req, res) => {
 app.get("/dashboard/top10", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, discord_id, SUM(valor) as total
+      SELECT usuario, discord_id, COALESCE(SUM(valor),0) as total
       FROM vs_registros
       GROUP BY usuario, discord_id
       ORDER BY total DESC
       LIMIT 10
     `);
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map(r => ({
+        ...r,
+        total: Number(r.total)
+      }))
+    );
   } catch (err) {
     res.status(500).json({ erro: "Erro top10" });
   }
@@ -135,14 +140,19 @@ app.get("/dashboard/top10", async (req, res) => {
 app.get("/dashboard/top10-piores", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, discord_id, SUM(valor) as total
+      SELECT usuario, discord_id, COALESCE(SUM(valor),0) as total
       FROM vs_registros
       GROUP BY usuario, discord_id
       ORDER BY total ASC
       LIMIT 10
     `);
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map(r => ({
+        ...r,
+        total: Number(r.total)
+      }))
+    );
   } catch (err) {
     res.status(500).json({ erro: "Erro top10 piores" });
   }
@@ -155,7 +165,7 @@ app.get("/dashboard/top10-piores", async (req, res) => {
 app.get("/dashboard/mvp", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, discord_id, SUM(valor) as total
+      SELECT usuario, discord_id, COALESCE(SUM(valor),0) as total
       FROM vs_registros
       WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
       GROUP BY usuario, discord_id
@@ -163,20 +173,27 @@ app.get("/dashboard/mvp", async (req, res) => {
       LIMIT 1
     `);
 
-    res.json(result.rows[0] || {});
+    const mvp = result.rows[0];
+
+    res.json(
+      mvp
+        ? { ...mvp, total: Number(mvp.total) }
+        : { usuario: "-", total: 0 }
+    );
+
   } catch (err) {
     res.status(500).json({ erro: "Erro MVP" });
   }
 });
 
 // =======================
-// VS SEMANAL (GRÁFICO)
+// VS SEMANAL
 // =======================
 
 app.get("/dashboard/vs-semanal", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, SUM(valor) as total
+      SELECT usuario, COALESCE(SUM(valor),0) as total
       FROM vs_registros
       WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
       GROUP BY usuario
@@ -184,20 +201,25 @@ app.get("/dashboard/vs-semanal", async (req, res) => {
       LIMIT 10
     `);
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map(r => ({
+        ...r,
+        total: Number(r.total)
+      }))
+    );
   } catch (err) {
     res.status(500).json({ erro: "Erro VS semanal" });
   }
 });
 
 // =======================
-// F1 SEMANAL (GRÁFICO)
+// F1 SEMANAL
 // =======================
 
 app.get("/dashboard/f1-semanal", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, SUM(valor) as total
+      SELECT usuario, COALESCE(SUM(valor),0) as total
       FROM f1_registros
       WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
       GROUP BY usuario
@@ -205,7 +227,12 @@ app.get("/dashboard/f1-semanal", async (req, res) => {
       LIMIT 10
     `);
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map(r => ({
+        ...r,
+        total: Number(r.total)
+      }))
+    );
   } catch (err) {
     res.status(500).json({ erro: "Erro F1 semanal" });
   }
