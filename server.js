@@ -25,7 +25,7 @@ app.post("/vs", async (req, res) => {
 
     await pool.query(
       `INSERT INTO vs_registros (usuario, discord_id, valor, created_at)
-       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+       VALUES ($1, $2, $3, NOW())`,
       [usuario, discord_id, valor]
     );
 
@@ -36,7 +36,7 @@ app.post("/vs", async (req, res) => {
   }
 });
 
-// 🔥 RANKING VS (CORRIGIDO FUSO BRASIL)
+// 🔥 RANKING VS (CORRIGIDO 100% UTC + BR FIX)
 app.get("/ranking", async (req, res) => {
   try {
     const period = req.query.period;
@@ -48,7 +48,8 @@ app.get("/ranking", async (req, res) => {
 
     if (period === "day") {
       query += `
-        WHERE created_at::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+        WHERE created_at >= (NOW() AT TIME ZONE 'UTC')::date
+        AND created_at < ((NOW() AT TIME ZONE 'UTC')::date + INTERVAL '1 day')
       `;
     }
 
@@ -67,7 +68,7 @@ app.get("/ranking", async (req, res) => {
 });
 
 // =======================
-// F1 (SEMANAL)
+// F1
 // =======================
 
 app.post("/f1", async (req, res) => {
@@ -76,7 +77,7 @@ app.post("/f1", async (req, res) => {
 
     await pool.query(
       `INSERT INTO f1_registros (usuario, discord_id, valor, created_at)
-       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+       VALUES ($1, $2, $3, NOW())`,
       [usuario, discord_id, valor]
     );
 
@@ -99,7 +100,7 @@ app.get("/ranking-f1", async (req, res) => {
 
     if (period === "week") {
       query += `
-        WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        WHERE created_at >= date_trunc('week', NOW())
       `;
     }
 
