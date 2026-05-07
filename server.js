@@ -54,7 +54,7 @@ app.get("/ranking", async (req, res) => {
       SELECT 
         usuario, 
         discord_id, 
-        SUM(valor)::float as total
+        SUM(valor) as total
       FROM vs_registros
     `;
 
@@ -75,7 +75,8 @@ app.get("/ranking", async (req, res) => {
     const data = result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
-      total: Number(r.total || 0)
+      // 🔥 FORÇA ABSOLUTA DE NÚMERO (CORREÇÃO REAL)
+      total: Number(parseFloat(r.total || 0))
     }));
 
     res.json(data);
