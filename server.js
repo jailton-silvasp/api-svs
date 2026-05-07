@@ -7,37 +7,33 @@ const { Pool } = pkg;
 const app = express();
 app.use(express.json());
 
-// 🔥 CORS LIBERADO (resolve Vercel)
-app.use(cors({
-  origin: "*"
-}));
+app.use(cors({ origin: "*" }));
 
-// 🔥 CONEXÃO DATABASE
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: { rejectUnauthorized: false },
 });
 
 // -------------------------
-// HEALTH CHECK
+// HEALTH
 // -------------------------
 app.get("/", (req, res) => {
   res.send("🔥 API SVS ONLINE");
 });
 
 // -------------------------
-// REGISTRO VS
+// REGISTRO VS (SALVA NÚMERO PURO)
 // -------------------------
 app.post("/vs", async (req, res) => {
   try {
     const { usuario, discord_id, valor } = req.body;
 
+    const numero = parseFloat(valor);
+
     await pool.query(
       `INSERT INTO vs_registros (usuario, discord_id, valor, criado_em)
        VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-      [usuario, discord_id, valor]
+      [usuario, discord_id, numero]
     );
 
     res.json({ ok: true });
@@ -48,7 +44,19 @@ app.post("/vs", async (req, res) => {
 });
 
 // -------------------------
-// RANKING (CORRIGIDO)
+// FORMATADOR GLOBAL (USADO NO BACKEND DO RANKING)
+// -------------------------
+function formatar(valor) {
+  valor = Number(valor);
+
+  if (valor >= 1_000_000_000) return (valor / 1_000_000_000).toFixed(2) + "G";
+  if (valor >= 1_000_000) return (valor / 1_000_000).toFixed(2) + "M";
+  if (valor >= 1_000) return (valor / 1_000).toFixed(2) + "K";
+  return valor.toFixed(2);
+}
+
+// -------------------------
+// RANKING (DIA / GLOBAL)
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
@@ -68,36 +76,22 @@ app.get("/ranking", async (req, res) => {
     query += `
       GROUP BY usuario, discord_id
       ORDER BY total DESC
+      LIMIT 10
     `;
 
     const result = await pool.query(query);
 
-    // 🔥 FUNÇÃO DE FORMATAÇÃO
-    const formatarValor = (valor) => {
-      valor = Number(valor);
-
-      if (valor >= 1_000_000_000) {
-        return (valor / 1_000_000_000).toFixed(2) + "G";
-      } else if (valor >= 1_000_000) {
-        return (valor / 1_000_000).toFixed(2) + "M";
-      } else if (valor >= 1_000) {
-        return (valor / 1_000).toFixed(2) + "K";
-      } else {
-        return valor.toFixed(2);
-      }
-    };
-
-    const rankingFormatado = result.rows.map((row) => ({
-      usuario: row.usuario,
-      discord_id: row.discord_id,
-      total: formatarValor(row.total) // 🔥 AQUI ESTÁ O SEGREDO
+    const data = result.rows.map(r => ({
+      usuario: r.usuario,
+      discord_id: r.discord_id,
+      total: Number(r.total)
     }));
 
-    res.json(rankingFormatado);
+    res.json(data);
 
   } catch (err) {
-    console.error("Erro no ranking:", err);
-    res.status(500).json({ erro: "Erro ao buscar ranking" });
+    console.error(err);
+    res.status(500).json({ erro: "Erro no ranking" });
   }
 });
 
@@ -107,21 +101,18 @@ app.get("/ranking", async (req, res) => {
 app.get("/dashboard", async (req, res) => {
   try {
 
-    // VS HOJE
     const hoje = await pool.query(`
-      SELECT COUNT(*) as total 
+      SELECT COUNT(*) as total
       FROM vs_registros
       WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
     `);
 
-    // VS TOTAL
     const total = await pool.query(`
       SELECT COUNT(*) as total FROM vs_registros
     `);
 
-    // RANKING (TOP 10)
     const ranking = await pool.query(`
-      SELECT usuario, SUM(valor::numeric) as total
+      SELECT usuario, SUM(valor) as total
       FROM vs_registros
       GROUP BY usuario
       ORDER BY total DESC
@@ -136,12 +127,12 @@ app.get("/dashboard", async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: "Erro ao buscar dados" });
+    res.status(500).json({ erro: "Erro dashboard" });
   }
 });
 
 // -------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🔥 API rodando na porta ${PORT}`);
+  console.log("🔥 API SVS ONLINE");
 });
