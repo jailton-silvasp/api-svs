@@ -11,13 +11,25 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// =======================
+// BASE
+// =======================
+
 app.get("/", (req, res) => {
   res.send("API ONLINE 🚀");
 });
 
+// =======================
+// FUNÇÃO AVATAR DISCORD
+// =======================
+
+function getAvatar(discord_id, avatar) {
+  if (!discord_id || !avatar) return null;
+  return `https://cdn.discordapp.com/avatars/${discord_id}/${avatar}.png`;
+}
 
 // =======================
-// VS (COM FILTRO DIÁRIO CORRIGIDO)
+// VS
 // =======================
 
 app.post("/vs", async (req, res) => {
@@ -37,43 +49,8 @@ app.post("/vs", async (req, res) => {
   }
 });
 
-app.get("/ranking", async (req, res) => {
-  try {
-    const period = req.query.period;
-
-    let query;
-
-    // 🔥 FILTRO DIÁRIO CORRIGIDO
-    if (period === "day") {
-      query = `
-        SELECT usuario, SUM(valor) as total
-        FROM vs_registros
-        WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
-        GROUP BY usuario
-        ORDER BY total DESC
-      `;
-    } else {
-      // ranking geral
-      query = `
-        SELECT usuario, SUM(valor) as total
-        FROM vs_registros
-        GROUP BY usuario
-        ORDER BY total DESC
-      `;
-    }
-
-    const result = await pool.query(query);
-
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao buscar ranking" });
-  }
-});
-
-
 // =======================
-// F1 (SEM ALTERAÇÃO DE FILTRO)
+// F1
 // =======================
 
 app.post("/f1", async (req, res) => {
@@ -93,22 +70,148 @@ app.post("/f1", async (req, res) => {
   }
 });
 
-app.get("/ranking-f1", async (req, res) => {
+// =======================
+// DASHBOARD - RESUMO
+// =======================
+
+app.get("/dashboard/resumo", async (req, res) => {
+  try {
+    const hoje = await pool.query(`
+      SELECT COUNT(*) FROM vs_registros
+      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+    `);
+
+    const semanaVS = await pool.query(`
+      SELECT COALESCE(SUM(valor),0) as total FROM vs_registros
+      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+    `);
+
+    const semanaF1 = await pool.query(`
+      SELECT COALESCE(SUM(valor),0) as total FROM f1_registros
+      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+    `);
+
+    const jogadores = await pool.query(`
+      SELECT COUNT(DISTINCT usuario) FROM vs_registros
+    `);
+
+    res.json({
+      vs_hoje: hoje.rows[0].count,
+      vs_semana: semanaVS.rows[0].total,
+      f1_semana: semanaF1.rows[0].total,
+      jogadores: jogadores.rows[0].count
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro resumo" });
+  }
+});
+
+// =======================
+// TOP 10 MELHORES
+// =======================
+
+app.get("/dashboard/top10", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, SUM(valor) as total
-      FROM f1_registros
-      GROUP BY usuario
+      SELECT usuario, discord_id, SUM(valor) as total
+      FROM vs_registros
+      GROUP BY usuario, discord_id
       ORDER BY total DESC
+      LIMIT 10
     `);
 
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao buscar ranking F1" });
+    res.status(500).json({ erro: "Erro top10" });
   }
 });
 
+// =======================
+// TOP 10 PIORES
+// =======================
+
+app.get("/dashboard/top10-piores", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT usuario, discord_id, SUM(valor) as total
+      FROM vs_registros
+      GROUP BY usuario, discord_id
+      ORDER BY total ASC
+      LIMIT 10
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro top10 piores" });
+  }
+});
+
+// =======================
+// MVP SEMANA
+// =======================
+
+app.get("/dashboard/mvp", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT usuario, discord_id, SUM(valor) as total
+      FROM vs_registros
+      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      GROUP BY usuario, discord_id
+      ORDER BY total DESC
+      LIMIT 1
+    `);
+
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    res.status(500).json({ erro: "Erro MVP" });
+  }
+});
+
+// =======================
+// VS SEMANAL (GRÁFICO)
+// =======================
+
+app.get("/dashboard/vs-semanal", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT usuario, SUM(valor) as total
+      FROM vs_registros
+      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      GROUP BY usuario
+      ORDER BY total DESC
+      LIMIT 10
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro VS semanal" });
+  }
+});
+
+// =======================
+// F1 SEMANAL (GRÁFICO)
+// =======================
+
+app.get("/dashboard/f1-semanal", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT usuario, SUM(valor) as total
+      FROM f1_registros
+      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      GROUP BY usuario
+      ORDER BY total DESC
+      LIMIT 10
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro F1 semanal" });
+  }
+});
+
+// =======================
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 API rodando"));
