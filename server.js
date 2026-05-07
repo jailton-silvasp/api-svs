@@ -1,244 +1,78 @@
-const express = require("express");
-const cors = require("cors");
-const { Pool } = require("pg");
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+
+const { Pool } = pkg;
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// =======================
-// BASE
-// =======================
-
-app.get("/", (req, res) => {
-  res.send("API ONLINE 🚀");
-});
-
-// =======================
-// FUNÇÃO AVATAR DISCORD
-// =======================
-
-function getAvatar(discord_id, avatar) {
-  if (!discord_id || !avatar) return null;
-  return `https://cdn.discordapp.com/avatars/${discord_id}/${avatar}.png`;
-}
-
-// =======================
-// VS
-// =======================
-
-app.post("/vs", async (req, res) => {
-  try {
-    const { usuario, discord_id, valor } = req.body;
-
-    await pool.query(
-      `INSERT INTO vs_registros (usuario, discord_id, valor, criado_em)
-       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-      [usuario, discord_id, valor]
-    );
-
-    res.json({ sucesso: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao salvar VS" });
-  }
-});
-
-// =======================
-// F1
-// =======================
-
-app.post("/f1", async (req, res) => {
-  try {
-    const { usuario, discord_id, valor } = req.body;
-
-    await pool.query(
-      `INSERT INTO f1_registros (usuario, discord_id, valor, criado_em)
-       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-      [usuario, discord_id, valor]
-    );
-
-    res.json({ sucesso: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao salvar F1" });
-  }
-});
-
-// =======================
-// DASHBOARD - RESUMO
-// =======================
-
-app.get("/dashboard/resumo", async (req, res) => {
+// 🔥 RESUMO
+app.get("/resumo", async (req, res) => {
   try {
     const hoje = await pool.query(`
-      SELECT COUNT(*) as total FROM vs_registros
+      SELECT COUNT(*) as total 
+      FROM vs_registros
       WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
     `);
 
-    const semanaVS = await pool.query(`
-      SELECT COALESCE(SUM(valor),0) as total FROM vs_registros
-      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+    const semana = await pool.query(`
+      SELECT COUNT(*) as total 
+      FROM vs_registros
+      WHERE criado_em >= NOW() - INTERVAL '7 days'
     `);
 
-    const semanaF1 = await pool.query(`
-      SELECT COALESCE(SUM(valor),0) as total FROM f1_registros
-      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+    const f1 = await pool.query(`
+      SELECT SUM(valor) as total 
+      FROM vs_registros
+      WHERE criado_em >= NOW() - INTERVAL '7 days'
     `);
 
     const jogadores = await pool.query(`
-      SELECT COUNT(DISTINCT usuario) as total FROM vs_registros
+      SELECT COUNT(DISTINCT jogador) as total 
+      FROM vs_registros
     `);
 
     res.json({
-      vs_hoje: Number(hoje.rows[0].total),
-      vs_semana: Number(semanaVS.rows[0].total),
-      f1_semana: Number(semanaF1.rows[0].total),
+      hoje: Number(hoje.rows[0].total),
+      semana: Number(semana.rows[0].total),
+      f1_semana: Math.floor(Number(f1.rows[0].total || 0)),
       jogadores: Number(jogadores.rows[0].total)
     });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: "Erro resumo" });
+    res.status(500).send("Erro no resumo");
   }
 });
 
-// =======================
-// TOP 10 MELHORES
-// =======================
-
-app.get("/dashboard/top10", async (req, res) => {
+// 🔥 TOP 10
+app.get("/ranking", async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT usuario, discord_id, COALESCE(SUM(valor),0) as total
+    const ranking = await pool.query(`
+      SELECT jogador, SUM(valor) as total
       FROM vs_registros
-      GROUP BY usuario, discord_id
+      GROUP BY jogador
       ORDER BY total DESC
       LIMIT 10
     `);
 
-    res.json(
-      result.rows.map(r => ({
-        ...r,
-        total: Number(r.total)
-      }))
-    );
+    const resultado = ranking.rows.map(r => ({
+      jogador: r.jogador,
+      total: Math.floor(Number(r.total))
+    }));
+
+    res.json(resultado);
+
   } catch (err) {
-    res.status(500).json({ erro: "Erro top10" });
+    console.error(err);
+    res.status(500).send("Erro no ranking");
   }
 });
 
-// =======================
-// TOP 10 PIORES
-// =======================
-
-app.get("/dashboard/top10-piores", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT usuario, discord_id, COALESCE(SUM(valor),0) as total
-      FROM vs_registros
-      GROUP BY usuario, discord_id
-      ORDER BY total ASC
-      LIMIT 10
-    `);
-
-    res.json(
-      result.rows.map(r => ({
-        ...r,
-        total: Number(r.total)
-      }))
-    );
-  } catch (err) {
-    res.status(500).json({ erro: "Erro top10 piores" });
-  }
-});
-
-// =======================
-// MVP SEMANA
-// =======================
-
-app.get("/dashboard/mvp", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT usuario, discord_id, COALESCE(SUM(valor),0) as total
-      FROM vs_registros
-      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
-      GROUP BY usuario, discord_id
-      ORDER BY total DESC
-      LIMIT 1
-    `);
-
-    const mvp = result.rows[0];
-
-    res.json(
-      mvp
-        ? { ...mvp, total: Number(mvp.total) }
-        : { usuario: "-", total: 0 }
-    );
-
-  } catch (err) {
-    res.status(500).json({ erro: "Erro MVP" });
-  }
-});
-
-// =======================
-// VS SEMANAL
-// =======================
-
-app.get("/dashboard/vs-semanal", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT usuario, COALESCE(SUM(valor),0) as total
-      FROM vs_registros
-      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
-      GROUP BY usuario
-      ORDER BY total DESC
-      LIMIT 10
-    `);
-
-    res.json(
-      result.rows.map(r => ({
-        ...r,
-        total: Number(r.total)
-      }))
-    );
-  } catch (err) {
-    res.status(500).json({ erro: "Erro VS semanal" });
-  }
-});
-
-// =======================
-// F1 SEMANAL
-// =======================
-
-app.get("/dashboard/f1-semanal", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT usuario, COALESCE(SUM(valor),0) as total
-      FROM f1_registros
-      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
-      GROUP BY usuario
-      ORDER BY total DESC
-      LIMIT 10
-    `);
-
-    res.json(
-      result.rows.map(r => ({
-        ...r,
-        total: Number(r.total)
-      }))
-    );
-  } catch (err) {
-    res.status(500).json({ erro: "Erro F1 semanal" });
-  }
-});
-
-// =======================
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🚀 API rodando"));
+app.listen(3000, () => console.log("API rodando 🚀"));
