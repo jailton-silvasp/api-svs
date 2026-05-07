@@ -28,7 +28,7 @@ app.get("/dashboard", async (req, res) => {
     const hoje = await pool.query(`
       SELECT COUNT(*) as total 
       FROM vs_registros
-      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      WHERE criado_em AT TIME ZONE 'America/Sao_Paulo' >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
     `);
 
     const total = await pool.query(`
