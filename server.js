@@ -6,7 +6,6 @@ const { Pool } = pkg;
 
 const app = express();
 app.use(express.json());
-
 app.use(cors({ origin: "*" }));
 
 const pool = new Pool({
@@ -22,13 +21,13 @@ app.get("/", (req, res) => {
 });
 
 // -------------------------
-// REGISTRO VS (SALVA NÚMERO PURO)
+// VS REGISTRO
 // -------------------------
 app.post("/vs", async (req, res) => {
   try {
     const { usuario, discord_id, valor } = req.body;
 
-    const numero = parseFloat(valor);
+    const numero = Number(valor);
 
     await pool.query(
       `INSERT INTO vs_registros (usuario, discord_id, valor, criado_em)
@@ -37,6 +36,7 @@ app.post("/vs", async (req, res) => {
     );
 
     res.json({ ok: true });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao salvar VS" });
@@ -44,26 +44,17 @@ app.post("/vs", async (req, res) => {
 });
 
 // -------------------------
-// FORMATADOR GLOBAL (USADO NO BACKEND DO RANKING)
-// -------------------------
-function formatar(valor) {
-  valor = Number(valor);
-
-  if (valor >= 1_000_000_000) return (valor / 1_000_000_000).toFixed(2) + "G";
-  if (valor >= 1_000_000) return (valor / 1_000_000).toFixed(2) + "M";
-  if (valor >= 1_000) return (valor / 1_000).toFixed(2) + "K";
-  return valor.toFixed(2);
-}
-
-// -------------------------
-// RANKING (DIA / GLOBAL)
+// RANKING (CORRIGIDO DEFINITIVO)
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
     const period = req.query.period;
 
     let query = `
-      SELECT usuario, discord_id, SUM(valor) as total
+      SELECT 
+        usuario, 
+        discord_id, 
+        SUM(valor)::float as total
       FROM vs_registros
     `;
 
@@ -84,7 +75,7 @@ app.get("/ranking", async (req, res) => {
     const data = result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
-      total: Number(r.total)
+      total: Number(r.total || 0)
     }));
 
     res.json(data);
@@ -112,7 +103,9 @@ app.get("/dashboard", async (req, res) => {
     `);
 
     const ranking = await pool.query(`
-      SELECT usuario, SUM(valor) as total
+      SELECT 
+        usuario, 
+        SUM(valor)::float as total
       FROM vs_registros
       GROUP BY usuario
       ORDER BY total DESC
@@ -122,7 +115,10 @@ app.get("/dashboard", async (req, res) => {
     res.json({
       hoje: Number(hoje.rows[0].total),
       total: Number(total.rows[0].total),
-      ranking: ranking.rows
+      ranking: ranking.rows.map(r => ({
+        usuario: r.usuario,
+        total: Number(r.total || 0)
+      }))
     });
 
   } catch (err) {
