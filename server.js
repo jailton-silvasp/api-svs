@@ -7,12 +7,12 @@ const { Pool } = pkg;
 const app = express();
 app.use(express.json());
 
-// 🔥 LIBERAR CORS (ESSENCIAL)
+// 🔥 CORS LIBERADO
 app.use(cors({
   origin: "*"
 }));
 
-// 🔥 CONEXÃO POSTGRES (Railway já usa DATABASE_URL)
+// 🔥 CONEXÃO DATABASE
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -25,30 +25,31 @@ app.get("/dashboard", async (req, res) => {
   try {
     console.log("🔥 Buscando dados do dashboard...");
 
-    // TOTAL HOJE
+    // 🔥 TOTAL HOJE
     const hoje = await pool.query(`
       SELECT COUNT(*) as total 
       FROM vs_registros
       WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
     `);
 
-    // TOTAL GERAL
+    // 🔥 TOTAL GERAL
     const total = await pool.query(`
-      SELECT COUNT(*) as total FROM vs_registros
+      SELECT COUNT(*) as total 
+      FROM vs_registros
     `);
 
-    // TOP JOGADORES
+    // 🔥 TOP JOGADORES (AGORA CORRETO)
     const ranking = await pool.query(`
-      SELECT jogador, COUNT(*) as total
+      SELECT usuario, COUNT(*) as total
       FROM vs_registros
-      GROUP BY jogador
+      GROUP BY usuario
       ORDER BY total DESC
       LIMIT 5
     `);
 
     res.json({
-      hoje: hoje.rows[0]?.total || 0,
-      total: total.rows[0]?.total || 0,
+      hoje: Number(hoje.rows[0]?.total || 0),
+      total: Number(total.rows[0]?.total || 0),
       ranking: ranking.rows || []
     });
 
@@ -58,7 +59,7 @@ app.get("/dashboard", async (req, res) => {
   }
 });
 
-// 🔥 START SERVER
+// 🔥 START
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server rodando na porta ${PORT}`);
