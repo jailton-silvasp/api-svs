@@ -1,3 +1,9 @@
+function formatNumber(num) {
+  if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + "G";
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(2) + "K";
+  return num;
+}
 import express from "express";
 import cors from "cors";
 import pkg from "pg";
@@ -49,7 +55,7 @@ app.get("/dashboard", async (req, res) => {
       total: Number(total.rows[0]?.total || 0),
       ranking: ranking.rows.map(r => ({
         usuario: r.usuario,
-        total: Number(r.total)
+        total: formatNumber(Number(r.total))
       }))
     });
 
@@ -77,7 +83,7 @@ app.get("/ranking", async (req, res) => {
     res.json(
       ranking.rows.map(r => ({
         usuario: r.usuario,
-        total: Number(r.total)
+        total: formatNumber(Number(r.total))
       }))
     );
 
