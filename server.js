@@ -52,9 +52,9 @@ app.get("/ranking", async (req, res) => {
 
     let query = `
       SELECT 
-        usuario, 
-        discord_id, 
-        SUM(valor) as total
+        usuario,
+        discord_id,
+        COALESCE(SUM(valor), 0) as total
       FROM vs_registros
     `;
 
@@ -75,8 +75,9 @@ app.get("/ranking", async (req, res) => {
     const data = result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
-      // 🔥 FORÇA ABSOLUTA DE NÚMERO (CORREÇÃO REAL)
-      total: Number(parseFloat(r.total || 0))
+
+      // 🔥 FORÇA ABSOLUTA (AGORA NÃO TEM ESCAPE)
+      total: parseFloat(r.total ?? 0)
     }));
 
     res.json(data);
