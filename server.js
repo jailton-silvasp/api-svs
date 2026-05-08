@@ -75,8 +75,6 @@ app.get("/ranking", async (req, res) => {
     const data = result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
-
-      // 🔥 FORÇA ABSOLUTA (AGORA NÃO TEM ESCAPE)
       total: parseFloat(r.total ?? 0)
     }));
 
@@ -85,6 +83,65 @@ app.get("/ranking", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro no ranking" });
+  }
+});
+
+// -------------------------
+// 🔥 NOVO: ÚLTIMOS REGISTROS
+// -------------------------
+app.get("/recentes", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT usuario, valor, criado_em
+      FROM vs_registros
+      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      ORDER BY criado_em DESC
+      LIMIT 10
+    `);
+
+    res.json(result.rows.map(r => ({
+      usuario: r.usuario,
+      valor: Number(r.valor),
+      criado_em: r.criado_em
+    })));
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar recentes" });
+  }
+});
+
+// -------------------------
+// 🔥 NOVO: RANKING SEMANAL (VS / F1 READY)
+// -------------------------
+app.get("/ranking/semanal", async (req, res) => {
+  try {
+    const tipo = req.query.tipo || "vs";
+
+    // 🔥 Preparado para expansão futura (ex: tabela f1_registros)
+    const tabela = tipo === "f1" ? "vs_registros" : "vs_registros";
+
+    const result = await pool.query(`
+      SELECT 
+        usuario, 
+        discord_id, 
+        COALESCE(SUM(valor), 0)::float as total
+      FROM ${tabela}
+      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      GROUP BY usuario, discord_id
+      ORDER BY total DESC
+      LIMIT 10
+    `);
+
+    res.json(result.rows.map(r => ({
+      usuario: r.usuario,
+      discord_id: r.discord_id,
+      total: Number(r.total || 0)
+    })));
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ranking semanal" });
   }
 });
 
