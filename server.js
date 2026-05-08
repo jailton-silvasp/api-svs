@@ -21,18 +21,19 @@ app.get("/", (req, res) => {
 });
 
 // -------------------------
-// VS REGISTRO
+// VS REGISTRO (COM AVATAR)
 // -------------------------
 app.post("/vs", async (req, res) => {
   try {
-    const { usuario, discord_id, valor } = req.body;
+    const { usuario, discord_id, valor, avatar_url } = req.body;
 
     const numero = Number(valor);
 
     await pool.query(
-      `INSERT INTO vs_registros (usuario, discord_id, valor, criado_em)
-       VALUES ($1, $2, $3, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-      [usuario, discord_id, numero]
+      `INSERT INTO vs_registros 
+       (usuario, discord_id, valor, avatar_url, criado_em)
+       VALUES ($1, $2, $3, $4, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+      [usuario, discord_id, numero, avatar_url || null]
     );
 
     res.json({ ok: true });
@@ -44,7 +45,7 @@ app.post("/vs", async (req, res) => {
 });
 
 // -------------------------
-// RANKING (CORRIGIDO DEFINITIVO)
+// RANKING (COM AVATAR)
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
@@ -54,6 +55,7 @@ app.get("/ranking", async (req, res) => {
       SELECT 
         usuario,
         discord_id,
+        COALESCE(MAX(avatar_url), '') as avatar_url,
         COALESCE(SUM(valor), 0) as total
       FROM vs_registros
     `;
@@ -75,6 +77,7 @@ app.get("/ranking", async (req, res) => {
     const data = result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
+      avatar_url: r.avatar_url || null,
       total: parseFloat(r.total ?? 0)
     }));
 
@@ -87,7 +90,7 @@ app.get("/ranking", async (req, res) => {
 });
 
 // -------------------------
-// 🔥 NOVO: ÚLTIMOS REGISTROS
+// 🔥 ÚLTIMOS REGISTROS (MANTIDO)
 // -------------------------
 app.get("/recentes", async (req, res) => {
   try {
@@ -112,19 +115,19 @@ app.get("/recentes", async (req, res) => {
 });
 
 // -------------------------
-// 🔥 NOVO: RANKING SEMANAL (VS / F1 READY)
+// 🔥 RANKING SEMANAL (COM AVATAR)
 // -------------------------
 app.get("/ranking/semanal", async (req, res) => {
   try {
     const tipo = req.query.tipo || "vs";
 
-    // 🔥 Preparado para expansão futura (ex: tabela f1_registros)
     const tabela = tipo === "f1" ? "vs_registros" : "vs_registros";
 
     const result = await pool.query(`
       SELECT 
         usuario, 
-        discord_id, 
+        discord_id,
+        COALESCE(MAX(avatar_url), '') as avatar_url,
         COALESCE(SUM(valor), 0)::float as total
       FROM ${tabela}
       WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
@@ -136,6 +139,7 @@ app.get("/ranking/semanal", async (req, res) => {
     res.json(result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
+      avatar_url: r.avatar_url || null,
       total: Number(r.total || 0)
     })));
 
@@ -146,7 +150,7 @@ app.get("/ranking/semanal", async (req, res) => {
 });
 
 // -------------------------
-// DASHBOARD
+// DASHBOARD (INALTERADO)
 // -------------------------
 app.get("/dashboard", async (req, res) => {
   try {
