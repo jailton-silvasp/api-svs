@@ -81,11 +81,12 @@ app.post("/f1", async (req, res) => {
 });
 
 // -------------------------
-// RANKING (COM AVATAR)
+// RANKING (COM AVATAR E FILTRO POR DATA)
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
     const period = req.query.period;
+    const date = req.query.date; // aceita YYYY-MM-DD
 
     let query = `
       SELECT 
@@ -97,9 +98,15 @@ app.get("/ranking", async (req, res) => {
     `;
 
     if (period === "day") {
-      query += `
-        WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
-      `;
+      if (date) {
+        query += `
+          WHERE DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') = '${date}'
+        `;
+      } else {
+        query += `
+          WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        `;
+      }
     }
 
     query += `
@@ -160,7 +167,6 @@ app.get("/ranking/semanal", async (req, res) => {
     let query = "";
 
     if (tipo === "f1") {
-      // 🔥 F1 (usa created_at e NÃO tem avatar)
       query = `
         SELECT 
           usuario, 
@@ -173,7 +179,6 @@ app.get("/ranking/semanal", async (req, res) => {
         LIMIT 10
       `;
     } else {
-      // ✅ VS (mantém como está)
       query = `
         SELECT 
           usuario, 
@@ -193,7 +198,7 @@ app.get("/ranking/semanal", async (req, res) => {
     res.json(result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
-      avatar_url: r.avatar_url || null, // no F1 virá null (normal)
+      avatar_url: r.avatar_url || null,
       total: Number(r.total || 0)
     })));
 
