@@ -86,7 +86,7 @@ app.post("/f1", async (req, res) => {
 app.get("/ranking", async (req, res) => {
   try {
     const period = req.query.period;
-    const date = req.query.date; // aceita YYYY-MM-DD
+    const date = req.query.date;
 
     let query = `
       SELECT 
@@ -167,16 +167,15 @@ app.get("/ranking/semanal", async (req, res) => {
     let query = "";
 
     if (tipo === "f1") {
+      // 🔥 AJUSTE: pega apenas o ÚLTIMO registro da semana por jogador
       query = `
-        SELECT 
-          usuario, 
+        SELECT DISTINCT ON (discord_id)
+          usuario,
           discord_id,
-          SUM(valor)::float as total
+          valor::float as total
         FROM f1_registros
         WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
-        GROUP BY usuario, discord_id
-        ORDER BY total DESC
-        LIMIT 10
+        ORDER BY discord_id, created_at DESC
       `;
     } else {
       query = `
