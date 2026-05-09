@@ -45,6 +45,30 @@ app.post("/vs", async (req, res) => {
 });
 
 // -------------------------
+// F1 REGISTRO (NOVO - SEM QUEBRAR NADA)
+// -------------------------
+app.post("/f1", async (req, res) => {
+  try {
+    const { usuario, discord_id, valor, avatar_url } = req.body;
+
+    const numero = Number(valor);
+
+    await pool.query(
+      `INSERT INTO f1_registros 
+       (usuario, discord_id, valor, avatar_url, created_at)
+       VALUES ($1, $2, $3, $4, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+      [usuario, discord_id, numero, avatar_url || null]
+    );
+
+    res.json({ ok: true });
+
+  } catch (err) {
+    console.error("ERRO F1:", err);
+    res.status(500).json({ erro: "Erro ao salvar F1" });
+  }
+});
+
+// -------------------------
 // RANKING (COM AVATAR)
 // -------------------------
 app.get("/ranking", async (req, res) => {
