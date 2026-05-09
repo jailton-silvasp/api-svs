@@ -49,22 +49,34 @@ app.post("/vs", async (req, res) => {
 // -------------------------
 app.post("/f1", async (req, res) => {
   try {
-    const { usuario, discord_id, valor, avatar_url } = req.body;
+    const { usuario, discord_id, valor } = req.body;
+
+    console.log("🔥 F1 RECEBIDO:", req.body);
 
     const numero = Number(valor);
 
+    if (!usuario || !discord_id || isNaN(numero)) {
+      return res.status(400).json({ erro: "Dados inválidos" });
+    }
+
     await pool.query(
       `INSERT INTO f1_registros 
-       (usuario, discord_id, valor, avatar_url, created_at)
-       VALUES ($1, $2, $3, $4, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-      [usuario, discord_id, numero, avatar_url || null]
+       (usuario, discord_id, valor, semana, data, created_at, criado_em)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+      [
+        usuario,
+        discord_id,
+        numero,
+        req.body.semana || null,
+        req.body.data || null
+      ]
     );
 
     res.json({ ok: true });
 
   } catch (err) {
-    console.error("ERRO F1:", err);
-    res.status(500).json({ erro: "Erro ao salvar F1" });
+    console.error("🔥 ERRO F1:", err);
+    res.status(500).json({ erro: err.message });
   }
 });
 
