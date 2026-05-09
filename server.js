@@ -121,25 +121,43 @@ app.get("/ranking/semanal", async (req, res) => {
   try {
     const tipo = req.query.tipo || "vs";
 
-    const tabela = tipo === "f1" ? "vs_registros" : "vs_registros";
+    let query = "";
 
-    const result = await pool.query(`
-      SELECT 
-        usuario, 
-        discord_id,
-        COALESCE(MAX(avatar_url), '') as avatar_url,
-        COALESCE(SUM(valor), 0)::float as total
-      FROM ${tabela}
-      WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
-      GROUP BY usuario, discord_id
-      ORDER BY total DESC
-      LIMIT 10
-    `);
+    if (tipo === "f1") {
+      // 🔥 F1 (usa created_at e NÃO tem avatar)
+      query = `
+        SELECT 
+          usuario, 
+          discord_id,
+          SUM(valor)::float as total
+        FROM f1_registros
+        WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        GROUP BY usuario, discord_id
+        ORDER BY total DESC
+        LIMIT 10
+      `;
+    } else {
+      // ✅ VS (mantém como está)
+      query = `
+        SELECT 
+          usuario, 
+          discord_id,
+          COALESCE(MAX(avatar_url), '') as avatar_url,
+          COALESCE(SUM(valor), 0)::float as total
+        FROM vs_registros
+        WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        GROUP BY usuario, discord_id
+        ORDER BY total DESC
+        LIMIT 10
+      `;
+    }
+
+    const result = await pool.query(query);
 
     res.json(result.rows.map(r => ({
       usuario: r.usuario,
       discord_id: r.discord_id,
-      avatar_url: r.avatar_url || null,
+      avatar_url: r.avatar_url || null, // no F1 virá null (normal)
       total: Number(r.total || 0)
     })));
 
