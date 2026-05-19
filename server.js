@@ -45,7 +45,7 @@ app.post("/vs", async (req, res) => {
 });
 
 // -------------------------
-// F1 REGISTRO (NOVO - SEM QUEBRAR NADA)
+// F1 REGISTRO
 // -------------------------
 app.post("/f1", async (req, res) => {
   try {
@@ -81,39 +81,67 @@ app.post("/f1", async (req, res) => {
 });
 
 // -------------------------
-// RANKING (COM AVATAR E FILTRO POR DATA)
+// RANKING (AJUSTADO)
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
     const period = req.query.period;
     const date = req.query.date;
 
-    let query = `
-      SELECT 
-        usuario,
-        discord_id,
-        COALESCE(MAX(avatar_url), '') as avatar_url,
-        COALESCE(SUM(valor), 0) as total
-      FROM vs_registros
-    `;
+    let query = "";
 
+    // 🔥 AJUSTE PRINCIPAL AQUI
     if (period === "day") {
+
+      let whereClause = "";
+
       if (date) {
-        query += `
+        whereClause = `
           WHERE DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') = '${date}'
         `;
       } else {
-        query += `
+        whereClause = `
           WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
         `;
       }
-    }
 
-    query += `
-      GROUP BY usuario, discord_id
-      ORDER BY total DESC
-      LIMIT 10
-    `;
+      query = `
+        SELECT 
+          usuario,
+          discord_id,
+          COALESCE(MAX(avatar_url), '') as avatar_url,
+          COALESCE(SUM(valor), 0) as total
+        FROM (
+          SELECT DISTINCT ON (discord_id)
+            usuario,
+            discord_id,
+            valor,
+            avatar_url,
+            criado_em
+          FROM vs_registros
+          ${whereClause}
+          ORDER BY discord_id, criado_em DESC
+        ) t
+        GROUP BY usuario, discord_id
+        ORDER BY total DESC
+        LIMIT 10
+      `;
+
+    } else {
+
+      // comportamento original (mantido)
+      query = `
+        SELECT 
+          usuario,
+          discord_id,
+          COALESCE(MAX(avatar_url), '') as avatar_url,
+          COALESCE(SUM(valor), 0) as total
+        FROM vs_registros
+        GROUP BY usuario, discord_id
+        ORDER BY total DESC
+        LIMIT 10
+      `;
+    }
 
     const result = await pool.query(query);
 
@@ -133,7 +161,7 @@ app.get("/ranking", async (req, res) => {
 });
 
 // -------------------------
-// 🔥 ÚLTIMOS REGISTROS (MANTIDO)
+// RECENTES
 // -------------------------
 app.get("/recentes", async (req, res) => {
   try {
@@ -158,7 +186,7 @@ app.get("/recentes", async (req, res) => {
 });
 
 // -------------------------
-// 🔥 RANKING SEMANAL (COM AVATAR)
+// RANKING SEMANAL
 // -------------------------
 app.get("/ranking/semanal", async (req, res) => {
   try {
@@ -167,7 +195,6 @@ app.get("/ranking/semanal", async (req, res) => {
     let query = "";
 
     if (tipo === "f1") {
-      // 🔥 AJUSTE: pega apenas o ÚLTIMO registro da semana por jogador
       query = `
         SELECT DISTINCT ON (discord_id)
           usuario,
@@ -208,7 +235,7 @@ app.get("/ranking/semanal", async (req, res) => {
 });
 
 // -------------------------
-// DASHBOARD (INALTERADO)
+// DASHBOARD
 // -------------------------
 app.get("/dashboard", async (req, res) => {
   try {
