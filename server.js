@@ -21,6 +21,28 @@ app.get("/", (req, res) => {
 });
 
 // -------------------------
+// FUNÇÃO AUXILIAR: Data Lógica
+// Marcações até 22:59 = dia atual
+// Marcações a partir das 23:00 = dia seguinte
+// -------------------------
+const DATA_LOGICA_SQL = `
+  CASE 
+    WHEN EXTRACT(HOUR FROM criado_em AT TIME ZONE 'America/Sao_Paulo') >= 23 
+    THEN DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 day'
+    ELSE DATE(criado_em AT TIME ZONE 'America/Sao_Paulo')
+  END
+`;
+
+// Data lógica de "hoje" (se agora >= 23h, considera como amanhã)
+const HOJE_LOGICO_SQL = `
+  CASE 
+    WHEN EXTRACT(HOUR FROM NOW() AT TIME ZONE 'America/Sao_Paulo') >= 23 
+    THEN DATE(NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 day'
+    ELSE DATE(NOW() AT TIME ZONE 'America/Sao_Paulo')
+  END
+`;
+
+// -------------------------
 // VS REGISTRO (COM AVATAR)
 // -------------------------
 app.post("/vs", async (req, res) => {
@@ -81,7 +103,7 @@ app.post("/f1", async (req, res) => {
 });
 
 // -------------------------
-// RANKING (AJUSTADO)
+// RANKING (CORRIGIDO COM DATA LÓGICA)
 // -------------------------
 app.get("/ranking", async (req, res) => {
   try {
@@ -90,18 +112,19 @@ app.get("/ranking", async (req, res) => {
 
     let query = "";
 
-    // 🔥 AJUSTE PRINCIPAL AQUI
     if (period === "day") {
 
       let whereClause = "";
 
       if (date) {
+        // Filtra pela data lógica (23h+ = próximo dia)
         whereClause = `
-          WHERE DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') = '${date}'
+          WHERE (${DATA_LOGICA_SQL})::date = '${date}'::date
         `;
       } else {
+        // Filtra pelo "hoje lógico"
         whereClause = `
-          WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+          WHERE (${DATA_LOGICA_SQL})::date = (${HOJE_LOGICO_SQL})::date
         `;
       }
 
@@ -129,7 +152,7 @@ app.get("/ranking", async (req, res) => {
 
     } else {
 
-      // comportamento original (mantido)
+      // comportamento original (ranking geral - mantido)
       query = `
         SELECT 
           usuario,
@@ -161,14 +184,14 @@ app.get("/ranking", async (req, res) => {
 });
 
 // -------------------------
-// RECENTES
+// RECENTES (CORRIGIDO COM DATA LÓGICA)
 // -------------------------
 app.get("/recentes", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT usuario, valor, criado_em
       FROM vs_registros
-      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      WHERE (${DATA_LOGICA_SQL})::date = (${HOJE_LOGICO_SQL})::date
       ORDER BY criado_em DESC
       LIMIT 10
     `);
@@ -235,15 +258,16 @@ app.get("/ranking/semanal", async (req, res) => {
 });
 
 // -------------------------
-// DASHBOARD
+// DASHBOARD (CORRIGIDO COM DATA LÓGICA)
 // -------------------------
 app.get("/dashboard", async (req, res) => {
   try {
 
+    // Conta registros do "hoje lógico"
     const hoje = await pool.query(`
       SELECT COUNT(*) as total
       FROM vs_registros
-      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      WHERE (${DATA_LOGICA_SQL})::date = (${HOJE_LOGICO_SQL})::date
     `);
 
     const total = await pool.query(`
