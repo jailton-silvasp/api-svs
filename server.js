@@ -54,7 +54,7 @@ app.post("/vs", async (req, res) => {
     await pool.query(
       `INSERT INTO vs_registros 
        (usuario, discord_id, valor, avatar_url, criado_em)
-       VALUES ($1, $2, $3, $4, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+       VALUES ($1, $2, $3, $4, NOW())`,
       [usuario, discord_id, numero, avatar_url || null]
     );
 
@@ -84,7 +84,7 @@ app.post("/f1", async (req, res) => {
     await pool.query(
       `INSERT INTO f1_registros 
        (usuario, discord_id, valor, semana, data, created_at, criado_em)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
       [
         usuario,
         discord_id,
