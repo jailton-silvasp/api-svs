@@ -24,21 +24,23 @@ app.get("/", (req, res) => {
 // FUNÇÃO AUXILIAR: Data Lógica
 // Marcações até 22:59 = dia atual
 // Marcações a partir das 23:00 = dia seguinte
+// CORREÇÃO: Usa timezone('America/Sao_Paulo', criado_em) para garantir conversão correta
+// independente de como a coluna foi criada (WITH ou WITHOUT TIME ZONE)
 // -------------------------
 const DATA_LOGICA_SQL = `
   CASE 
-    WHEN EXTRACT(HOUR FROM criado_em AT TIME ZONE 'America/Sao_Paulo') >= 23 
-    THEN DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 day'
-    ELSE DATE(criado_em AT TIME ZONE 'America/Sao_Paulo')
+    WHEN EXTRACT(HOUR FROM timezone('America/Sao_Paulo', criado_em)) >= 23 
+    THEN DATE(timezone('America/Sao_Paulo', criado_em)) + INTERVAL '1 day'
+    ELSE DATE(timezone('America/Sao_Paulo', criado_em))
   END
 `;
 
 // Data lógica de "hoje" (se agora >= 23h, considera como amanhã)
 const HOJE_LOGICO_SQL = `
   CASE 
-    WHEN EXTRACT(HOUR FROM NOW() AT TIME ZONE 'America/Sao_Paulo') >= 23 
-    THEN DATE(NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 day'
-    ELSE DATE(NOW() AT TIME ZONE 'America/Sao_Paulo')
+    WHEN EXTRACT(HOUR FROM timezone('America/Sao_Paulo', NOW())) >= 23 
+    THEN DATE(timezone('America/Sao_Paulo', NOW())) + INTERVAL '1 day'
+    ELSE DATE(timezone('America/Sao_Paulo', NOW()))
   END
 `;
 
@@ -54,7 +56,7 @@ app.post("/vs", async (req, res) => {
     await pool.query(
       `INSERT INTO vs_registros 
        (usuario, discord_id, valor, avatar_url, criado_em)
-       VALUES ($1, $2, $3, $4, NOW())`,
+       VALUES ($1, $2, $3, $4, NOW() AT TIME ZONE 'America/Sao_Paulo')`,
       [usuario, discord_id, numero, avatar_url || null]
     );
 
@@ -84,7 +86,7 @@ app.post("/f1", async (req, res) => {
     await pool.query(
       `INSERT INTO f1_registros 
        (usuario, discord_id, valor, semana, data, created_at, criado_em)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+       VALUES ($1, $2, $3, $4, $5, NOW() AT TIME ZONE 'America/Sao_Paulo', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
       [
         usuario,
         discord_id,
@@ -224,7 +226,7 @@ app.get("/ranking/semanal", async (req, res) => {
           discord_id,
           valor::float as total
         FROM f1_registros
-        WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        WHERE created_at >= date_trunc('week', timezone('America/Sao_Paulo', NOW()))
         ORDER BY discord_id, created_at DESC
       `;
     } else {
@@ -235,7 +237,7 @@ app.get("/ranking/semanal", async (req, res) => {
           COALESCE(MAX(avatar_url), '') as avatar_url,
           COALESCE(SUM(valor), 0)::float as total
         FROM vs_registros
-        WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        WHERE criado_em >= date_trunc('week', timezone('America/Sao_Paulo', NOW()))
         GROUP BY usuario, discord_id
         ORDER BY total DESC
         LIMIT 10
