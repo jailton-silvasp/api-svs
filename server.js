@@ -56,21 +56,46 @@ const HOJE_LOGICO_SQL = `
   END
 `;
 
+// Início da semana baseado na data lógica
+const INICIO_SEMANA_SQL = `
+  date_trunc(
+    'week',
+    (${HOJE_LOGICO_SQL})::date
+  )::date
+`;
 // -------------------------
 // VS REGISTRO (COM AVATAR)
 // -------------------------
 app.post("/vs", async (req, res) => {
   try {
-    const { usuario, discord_id, valor, avatar_url } = req.body;
+    const { usuario, discord_id, valor, avatar_url, data } = req.body;
 
     const numero = Number(valor);
 
     await pool.query(
-      `INSERT INTO vs_registros 
-       (usuario, discord_id, valor, avatar_url, criado_em)
-       VALUES ($1, $2, $3, $4, NOW())`,
-      [usuario, discord_id, numero, avatar_url || null]
-    );
+`
+INSERT INTO vs_registros
+(
+ usuario,
+ discord_id,
+ valor,
+ avatar_url,
+ data,
+ criado_em
+)
+VALUES
+(
+ $1,$2,$3,$4,$5,NOW()
+)
+`,
+[
+ usuario,
+ discord_id,
+ numero,
+ avatar_url || null,
+ data
+]
+);
 
     res.json({ ok: true });
 
@@ -133,12 +158,12 @@ app.get("/ranking", async (req, res) => {
       if (date) {
         // Filtra pela data lógica (23h+ = próximo dia)
         whereClause = `
-  WHERE (${DATA_LOGICA_SQL})::date = $1::date
+  WHERE data = $1::date
 `;
       } else {
         // Filtra pelo "hoje lógico"
         whereClause = `
-          WHERE (${DATA_LOGICA_SQL})::date = (${HOJE_LOGICO_SQL})::date
+          WHERE data = (${HOJE_LOGICO_SQL})::date
         `;
       }
 
@@ -214,7 +239,7 @@ app.get("/recentes", async (req, res) => {
     const result = await pool.query(`
       SELECT usuario, valor, criado_em
       FROM vs_registros
-      WHERE (${DATA_LOGICA_SQL})::date = (${HOJE_LOGICO_SQL})::date
+      WHERE data = (${HOJE_LOGICO_SQL})::date
       ORDER BY criado_em DESC
       LIMIT 10
     `);
@@ -252,20 +277,19 @@ app.get("/ranking/semanal", async (req, res) => {
         ORDER BY discord_id, created_at DESC
       `;
     } else {
-      query = `
-        SELECT 
-          usuario, 
-          discord_id,
-          COALESCE(MAX(avatar_url), '') as avatar_url,
-          COALESCE(SUM(valor), 0)::float as total
-        FROM vs_registros
-        WHERE timezone('America/Sao_Paulo', criado_em)
-              >= date_trunc('week', timezone('America/Sao_Paulo', NOW()))
-        GROUP BY usuario, discord_id
-        ORDER BY total DESC
-        LIMIT 10
-      `;
-    }
+  query = `
+    SELECT
+      usuario,
+      discord_id,
+      COALESCE(MAX(avatar_url), '') as avatar_url,
+      COALESCE(SUM(valor), 0)::float as total
+    FROM vs_registros
+    WHERE data >= (${INICIO_SEMANA_SQL})
+    GROUP BY usuario, discord_id
+    ORDER BY total DESC
+    LIMIT 10
+  `;
+}
 
   const result = await pool.query(query);
 
@@ -292,7 +316,7 @@ app.get("/dashboard", async (req, res) => {
     const hoje = await pool.query(`
       SELECT COUNT(*) as total
       FROM vs_registros
-      WHERE (${DATA_LOGICA_SQL})::date = (${HOJE_LOGICO_SQL})::date
+      WHERE data = (${HOJE_LOGICO_SQL})::date
     `);
 
     const total = await pool.query(`
