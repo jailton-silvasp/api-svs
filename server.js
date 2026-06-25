@@ -185,7 +185,6 @@ app.get("/ranking", async (req, res) => {
     ORDER BY discord_id, criado_em DESC
   ) t
   ORDER BY total DESC
-  LIMIT 10
 `;
 
     } else {
@@ -208,7 +207,6 @@ app.get("/ranking", async (req, res) => {
     ORDER BY discord_id, criado_em DESC
   ) t
   ORDER BY total DESC
-  LIMIT 10
 `;
     }
 
@@ -287,7 +285,6 @@ app.get("/ranking/semanal", async (req, res) => {
     WHERE data >= (${INICIO_SEMANA_SQL})
     GROUP BY usuario, discord_id
     ORDER BY total DESC
-    LIMIT 10
   `;
 }
 
@@ -330,7 +327,6 @@ app.get("/dashboard", async (req, res) => {
       FROM vs_registros
       GROUP BY usuario
       ORDER BY total DESC
-      LIMIT 10
     `);
 
     res.json({
