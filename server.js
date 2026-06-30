@@ -264,16 +264,14 @@ app.get("/ranking/semanal", async (req, res) => {
     let query = "";
 
     if (tipo === "f1") {
-      query = `
-        SELECT DISTINCT ON (discord_id)
-          usuario,
-          discord_id,
-          valor::float as total
-        FROM f1_registros
-        WHERE timezone('America/Sao_Paulo', created_at)
-              >= date_trunc('week', timezone('America/Sao_Paulo', NOW()))
-        ORDER BY discord_id, created_at DESC
-      `;
+  query = `
+    SELECT DISTINCT ON (discord_id)
+      usuario,
+      discord_id,
+      valor::float as total
+    FROM f1_registros
+    ORDER BY discord_id, created_at DESC
+  `;
     } else {
   query = `
     SELECT
