@@ -1,55 +1,73 @@
-const express = require("express");
-const cors = require("cors");
-const { Pool } = require("pg");
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+
+const { Pool } = pkg;
 
 const app = express();
-
-app.use(cors({ origin: "*" }));
 app.use(express.json());
+app.use(cors({ origin: "*" }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false },
 });
 
-
-// ================================
+// -------------------------
 // HEALTH
-// ================================
-
+// -------------------------
 app.get("/", (req, res) => {
-  res.send("SVS API online");
+  res.send("🔥 API SVS ONLINE");
 });
 
-
-// ================================
-// DATA LÓGICA
-// ================================
-
+// -------------------------
+// FUNÇÃO AUXILIAR: Data Lógica
+// -------------------------
 const DATA_LOGICA_SQL = `
   CASE
-    WHEN EXTRACT(HOUR FROM NOW() AT TIME ZONE 'America/Sao_Paulo') >= 23
-    THEN (NOW() AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
-    ELSE (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+    WHEN (
+      timezone('America/Sao_Paulo', criado_em)::time
+      >= TIME '23:00:00'
+    )
+    THEN (
+      timezone('America/Sao_Paulo', criado_em)::date + INTERVAL '1 day'
+    )
+
+    ELSE timezone('America/Sao_Paulo', criado_em)::date
   END
 `;
 
-const INICIO_SEMANA_SQL = `
-  DATE_TRUNC(
-    'week',
-    NOW() AT TIME ZONE 'America/Sao_Paulo'
-  )
+// -------------------------
+// Data lógica de "hoje"
+// -------------------------
+const HOJE_LOGICO_SQL = `
+  CASE
+    WHEN (
+      timezone('America/Sao_Paulo', NOW())::time
+      >= TIME '23:00:00'
+    )
+    THEN (
+      timezone('America/Sao_Paulo', NOW())::date + INTERVAL '1 day'
+    )
+
+    ELSE timezone('America/Sao_Paulo', NOW())::date
+  END
 `;
 
+// -------------------------
+// Início da semana
+// -------------------------
+const INICIO_SEMANA_SQL = `
+  date_trunc(
+    'week',
+    (${HOJE_LOGICO_SQL})::date
+  )::date
+`;
 
-// ================================
-// REGISTRAR VS
-// ================================
-
+// -------------------------
+// VS REGISTRO
+// -------------------------
 app.post("/vs", async (req, res) => {
-
   try {
 
     const {
@@ -63,9 +81,11 @@ app.post("/vs", async (req, res) => {
 
     if (!["Principal", "Academy"].includes(estrutura)) {
       return res.status(400).json({
-        error: "Estrutura inválida"
+        erro: "Estrutura inválida"
       });
     }
+
+    const numero = Number(valor);
 
     await pool.query(
       `
@@ -76,41 +96,40 @@ app.post("/vs", async (req, res) => {
         valor,
         avatar_url,
         data,
+        criado_em,
         estrutura
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES
+      (
+        $1,$2,$3,$4,$5,NOW(),$6
+      )
       `,
       [
         usuario,
         discord_id,
-        valor,
-        avatar_url,
+        numero,
+        avatar_url || null,
         data,
         estrutura
       ]
     );
 
-    res.json({
-      success: true
-    });
+    res.json({ ok: true });
 
   } catch (err) {
 
     console.error(err);
 
     res.status(500).json({
-      error: "Erro ao registrar VS"
+      erro: "Erro ao salvar VS"
     });
 
   }
-
 });
 
-
-// ================================
-// REGISTRAR F1
-// ================================
-
+// -------------------------
+// F1 REGISTRO
+// -------------------------
 app.post("/f1", async (req, res) => {
 
   try {
@@ -119,15 +138,28 @@ app.post("/f1", async (req, res) => {
       usuario,
       discord_id,
       valor,
-      avatar_url,
-      data,
       semana,
+      data,
       estrutura
     } = req.body;
 
+    console.log("🔥 F1 RECEBIDO:", req.body);
+
+    const numero = Number(valor);
+
+    if (
+      !usuario ||
+      !discord_id ||
+      isNaN(numero)
+    ) {
+      return res.status(400).json({
+        erro: "Dados inválidos"
+      });
+    }
+
     if (!["Principal", "Academy"].includes(estrutura)) {
       return res.status(400).json({
-        error: "Estrutura inválida"
+        erro: "Estrutura inválida"
       });
     }
 
@@ -138,123 +170,216 @@ app.post("/f1", async (req, res) => {
         usuario,
         discord_id,
         valor,
-        avatar_url,
-        data,
         semana,
+        data,
+        created_at,
+        criado_em,
         estrutura
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES
+      (
+        $1,$2,$3,$4,$5,NOW(),NOW(),$6
+      )
       `,
       [
         usuario,
         discord_id,
-        valor,
-        avatar_url,
-        data,
-        semana,
+        numero,
+        semana || null,
+        data || null,
         estrutura
       ]
     );
 
-    res.json({
-      success: true
-    });
+    res.json({ ok: true });
 
   } catch (err) {
 
-    console.error(err);
+    console.error("🔥 ERRO F1:", err);
 
     res.status(500).json({
-      error: "Erro ao registrar F1"
+      erro: err.message
     });
 
   }
-
 });
 
-
-// ================================
-// RANKING DO DIA
-// ================================
-
+// -------------------------
+// RANKING
+// -------------------------
 app.get("/ranking", async (req, res) => {
 
   try {
 
-    const result = await pool.query(`
-      SELECT
-        usuario,
-        discord_id,
-        SUM(valor) AS total,
-        MAX(avatar_url) AS avatar_url,
-        COALESCE(MAX(estrutura), 'Principal') AS estrutura
-      FROM vs_registros
-      WHERE data = (
-        ${DATA_LOGICA_SQL}
-      )
-      GROUP BY usuario, discord_id
-      ORDER BY total DESC
-      LIMIT 100
-    `);
+    const period = req.query.period;
+    const date = req.query.date;
 
-    res.json(result.rows);
+    let query = "";
+
+    if (period === "day") {
+
+      let whereClause = "";
+
+      if (date) {
+
+        whereClause = `
+          WHERE data = $1::date
+        `;
+
+      } else {
+
+        whereClause = `
+          WHERE data = (${HOJE_LOGICO_SQL})::date
+        `;
+
+      }
+
+      query = `
+        SELECT
+          usuario,
+          discord_id,
+          COALESCE(avatar_url, '') as avatar_url,
+          valor as total,
+          COALESCE(estrutura, 'Principal') as estrutura
+        FROM (
+          SELECT DISTINCT ON (discord_id)
+            usuario,
+            discord_id,
+            valor,
+            avatar_url,
+            criado_em,
+            estrutura
+          FROM vs_registros
+          ${whereClause}
+          ORDER BY discord_id, criado_em DESC
+        ) t
+        ORDER BY total DESC
+      `;
+
+    } else {
+
+      query = `
+        SELECT
+          usuario,
+          discord_id,
+          COALESCE(avatar_url, '') as avatar_url,
+          valor as total,
+          COALESCE(estrutura, 'Principal') as estrutura
+        FROM (
+          SELECT DISTINCT ON (discord_id)
+            usuario,
+            discord_id,
+            valor,
+            avatar_url,
+            criado_em,
+            estrutura
+          FROM vs_registros
+          ORDER BY discord_id, criado_em DESC
+        ) t
+        ORDER BY total DESC
+      `;
+
+    }
+
+    const result = date
+      ? await pool.query(query, [date])
+      : await pool.query(query);
+
+    const data = result.rows.map(r => ({
+      usuario: r.usuario,
+      discord_id: r.discord_id,
+      avatar_url: r.avatar_url || null,
+      total: parseFloat(r.total ?? 0),
+      estrutura: r.estrutura || "Principal"
+    }));
+
+    res.json(data);
 
   } catch (err) {
 
     console.error(err);
 
     res.status(500).json({
-      error: "Erro ao buscar ranking"
+      erro: "Erro no ranking"
     });
 
   }
 
 });
 
-
-// ================================
-// REGISTROS RECENTES
-// ================================
-
+// -------------------------
+// RECENTES
+// -------------------------
 app.get("/recentes", async (req, res) => {
 
   try {
 
-    const result = await pool.query(`
+    const estrutura = req.query.estrutura;
+
+    let query = `
       SELECT
         usuario,
-        discord_id,
         valor,
-        avatar_url,
-        data
+        criado_em,
+        COALESCE(estrutura, 'Principal') as estrutura
       FROM vs_registros
-      ORDER BY id DESC
-      LIMIT 50
-    `);
+      WHERE data = (${HOJE_LOGICO_SQL})::date
+    `;
 
-    res.json(result.rows);
+    const params = [];
+
+    if (estrutura) {
+
+      if (!["Principal", "Academy"].includes(estrutura)) {
+        return res.status(400).json({
+          erro: "Estrutura inválida"
+        });
+      }
+
+      params.push(estrutura);
+
+      query += `
+        AND COALESCE(estrutura, 'Principal') = $1
+      `;
+
+    }
+
+    query += `
+      ORDER BY criado_em DESC
+      LIMIT 10
+    `;
+
+    const result = await pool.query(query, params);
+
+    res.json(
+      result.rows.map(r => ({
+        usuario: r.usuario,
+        valor: Number(r.valor),
+        criado_em: r.criado_em,
+        estrutura: r.estrutura || "Principal"
+      }))
+    );
 
   } catch (err) {
 
     console.error(err);
 
     res.status(500).json({
-      error: "Erro ao buscar registros recentes"
+      erro: "Erro ao buscar recentes"
     });
 
   }
 
 });
 
-
-// ================================
+// -------------------------
 // RANKING SEMANAL
-// ================================
-
+// -------------------------
 app.get("/ranking/semanal", async (req, res) => {
 
   try {
 
+    const tipo = req.query.tipo || "vs";
     const estrutura = req.query.estrutura;
 
     if (
@@ -262,101 +387,95 @@ app.get("/ranking/semanal", async (req, res) => {
       !["Principal", "Academy"].includes(estrutura)
     ) {
       return res.status(400).json({
-        error: "Estrutura inválida"
+        erro: "Estrutura inválida"
       });
     }
 
+    let query = "";
+    const params = [];
 
-    // F1
-    let f1Query = `
-      SELECT
-        usuario,
-        discord_id,
-        SUM(valor) AS total,
-        MAX(avatar_url) AS avatar_url,
-        COALESCE(MAX(estrutura), 'Principal') AS estrutura
-      FROM f1_registros
-      WHERE 1=1
-    `;
+    if (tipo === "f1") {
 
-    const f1Params = [];
+      query = `
+        SELECT DISTINCT ON (discord_id)
+          usuario,
+          discord_id,
+          valor::float as total,
+          COALESCE(estrutura, 'Principal') as estrutura
+        FROM f1_registros
+      `;
 
-    if (estrutura) {
+      if (estrutura) {
 
-      f1Params.push(estrutura);
+        params.push(estrutura);
 
-      f1Query += `
-        AND COALESCE(estrutura, 'Principal') = $${f1Params.length}
+        query += `
+          WHERE COALESCE(estrutura, 'Principal') = $1
+        `;
+
+      }
+
+      query += `
+        ORDER BY discord_id, created_at DESC
+      `;
+
+    } else {
+
+      query = `
+        SELECT
+          usuario,
+          discord_id,
+          COALESCE(MAX(avatar_url), '') as avatar_url,
+          COALESCE(SUM(valor), 0)::float as total,
+          COALESCE(MAX(estrutura), 'Principal') as estrutura
+        FROM vs_registros
+        WHERE data >= (${INICIO_SEMANA_SQL})
+      `;
+
+      if (estrutura) {
+
+        params.push(estrutura);
+
+        query += `
+          AND COALESCE(estrutura, 'Principal') = $1
+        `;
+
+      }
+
+      query += `
+        GROUP BY usuario, discord_id
+        ORDER BY total DESC
       `;
 
     }
 
-    f1Query += `
-      GROUP BY usuario, discord_id
-      ORDER BY total DESC
-      LIMIT 100
-    `;
+    const result = await pool.query(query, params);
 
-
-    // VS
-    let vsQuery = `
-      SELECT
-        usuario,
-        discord_id,
-        SUM(valor) AS total,
-        MAX(avatar_url) AS avatar_url,
-        COALESCE(MAX(estrutura), 'Principal') AS estrutura
-      FROM vs_registros
-      WHERE data >= (${INICIO_SEMANA_SQL})
-    `;
-
-    const vsParams = [];
-
-    if (estrutura) {
-
-      vsParams.push(estrutura);
-
-      vsQuery += `
-        AND COALESCE(estrutura, 'Principal') = $${vsParams.length}
-      `;
-
-    }
-
-    vsQuery += `
-      GROUP BY usuario, discord_id
-      ORDER BY total DESC
-      LIMIT 100
-    `;
-
-
-    const [f1Result, vsResult] = await Promise.all([
-      pool.query(f1Query, f1Params),
-      pool.query(vsQuery, vsParams)
-    ]);
-
-
-    res.json({
-      f1: f1Result.rows,
-      vs: vsResult.rows
-    });
+    res.json(
+      result.rows.map(r => ({
+        usuario: r.usuario,
+        discord_id: r.discord_id,
+        avatar_url: r.avatar_url || null,
+        total: Number(r.total || 0),
+        estrutura: r.estrutura || "Principal"
+      }))
+    );
 
   } catch (err) {
 
     console.error(err);
 
     res.status(500).json({
-      error: "Erro ao buscar ranking semanal"
+      erro: "Erro ranking semanal"
     });
 
   }
 
 });
 
-
-// ================================
+// -------------------------
 // DASHBOARD
-// ================================
-
+// -------------------------
 app.get("/dashboard", async (req, res) => {
 
   try {
@@ -368,136 +487,73 @@ app.get("/dashboard", async (req, res) => {
       !["Principal", "Academy"].includes(estrutura)
     ) {
       return res.status(400).json({
-        error: "Estrutura inválida"
+        erro: "Estrutura inválida"
       });
     }
 
+    let filtroEstrutura = "";
 
-    // ============================
-    // VS
-    // ============================
+    const params = [];
 
-    let vsQuery = `
-      SELECT
-        usuario,
-        discord_id,
-        SUM(valor) AS total,
-        MAX(avatar_url) AS avatar_url,
-        COALESCE(MAX(estrutura), 'Principal') AS estrutura
+    if (estrutura) {
+
+      params.push(estrutura);
+
+      filtroEstrutura = `
+        AND COALESCE(estrutura, 'Principal') = $1
+      `;
+
+    }
+
+    // Conta registros do "hoje lógico"
+    const hoje = await pool.query(
+      `
+      SELECT COUNT(*) as total
+      FROM vs_registros
+      WHERE data = (${HOJE_LOGICO_SQL})::date
+      ${filtroEstrutura}
+      `,
+      params
+    );
+
+    // Total de registros
+    const total = await pool.query(
+      `
+      SELECT COUNT(*) as total
       FROM vs_registros
       WHERE 1=1
-    `;
+      ${filtroEstrutura}
+      `,
+      params
+    );
 
-    const vsParams = [];
-
-    if (estrutura) {
-
-      vsParams.push(estrutura);
-
-      vsQuery += `
-        AND COALESCE(estrutura, 'Principal') = $${vsParams.length}
-      `;
-
-    }
-
-    vsQuery += `
-      GROUP BY usuario, discord_id, estrutura
-      ORDER BY total DESC
-    `;
-
-
-    // ============================
-    // F1
-    // ============================
-
-    let f1Query = `
+    // Ranking
+    const ranking = await pool.query(
+      `
       SELECT
         usuario,
-        discord_id,
-        SUM(valor) AS total,
-        MAX(avatar_url) AS avatar_url,
-        COALESCE(MAX(estrutura), 'Principal') AS estrutura
-      FROM f1_registros
-      WHERE 1=1
-    `;
-
-    const f1Params = [];
-
-    if (estrutura) {
-
-      f1Params.push(estrutura);
-
-      f1Query += `
-        AND COALESCE(estrutura, 'Principal') = $${f1Params.length}
-      `;
-
-    }
-
-    f1Query += `
-      GROUP BY usuario, discord_id, estrutura
-      ORDER BY total DESC
-    `;
-
-
-    // ============================
-    // ÚLTIMOS VS
-    // ============================
-
-    let recentesQuery = `
-      SELECT
-        usuario,
-        discord_id,
-        valor,
-        avatar_url,
-        data,
-        COALESCE(estrutura, 'Principal') AS estrutura
+        SUM(valor)::float as total,
+        COALESCE(MAX(estrutura), 'Principal') as estrutura
       FROM vs_registros
       WHERE 1=1
-    `;
-
-    const recentesParams = [];
-
-    if (estrutura) {
-
-      recentesParams.push(estrutura);
-
-      recentesQuery += `
-        AND COALESCE(estrutura, 'Principal') = $${recentesParams.length}
-      `;
-
-    }
-
-    recentesQuery += `
-      ORDER BY id DESC
-      LIMIT 50
-    `;
-
-
-    const [
-      vsResult,
-      f1Result,
-      recentesResult
-    ] = await Promise.all([
-
-      pool.query(vsQuery, vsParams),
-
-      pool.query(f1Query, f1Params),
-
-      pool.query(
-        recentesQuery,
-        recentesParams
-      )
-
-    ]);
-
+      ${filtroEstrutura}
+      GROUP BY usuario
+      ORDER BY total DESC
+      `,
+      params
+    );
 
     res.json({
 
-      vs: vsResult.rows,
+      hoje: Number(hoje.rows[0].total),
 
-      f1: f1Result.rows,
+      total: Number(total.rows[0].total),
 
-      recentes: recentesResult.rows
+      ranking: ranking.rows.map(r => ({
+        usuario: r.usuario,
+        total: Number(r.total || 0),
+        estrutura: r.estrutura || "Principal"
+      }))
 
     });
 
@@ -506,24 +562,16 @@ app.get("/dashboard", async (req, res) => {
     console.error(err);
 
     res.status(500).json({
-      error: "Erro ao carregar dashboard"
+      erro: "Erro dashboard"
     });
 
   }
 
 });
 
-
-// ================================
-// SERVIDOR
-// ================================
-
+// -------------------------
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-
-  console.log(
-    `🚀 API rodando na porta ${PORT}`
-  );
-
+  console.log("🔥 API SVS ONLINE");
 });
