@@ -11,6 +11,15 @@ app.use(cors({ origin: "*" }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+});
+
+pool.on("error", (err) => {
+  console.error("🔥 Erro inesperado no pool PostgreSQL:", err);
 });
 
 // -------------------------
@@ -18,6 +27,17 @@ const pool = new Pool({
 // -------------------------
 app.get("/", (req, res) => {
   res.send("🔥 API SVS ONLINE");
+});
+
+// Verifica a disponibilidade real do PostgreSQL
+app.get("/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.status(200).json({ ok: true, database: "connected" });
+  } catch (err) {
+    console.error("🔥 Health check: banco indisponível:", err);
+    res.status(503).json({ ok: false, database: "unavailable" });
+  }
 });
 
 // -------------------------
