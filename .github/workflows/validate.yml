@@ -1,0 +1,18 @@
+name: Validate API
+on:
+  push:
+    branches: [fix/railway-free-db-resilience]
+  pull_request:
+    branches: [main]
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: node --check server.js
+      - name: Run isolated health-check tests
+        run: node --test tests/api-health.test.js

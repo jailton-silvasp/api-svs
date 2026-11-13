@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import pkg from "pg";
+import { verificarConexaoBanco } from "./health-check.js";
 
 const { Pool } = pkg;
 
@@ -11,6 +12,15 @@ app.use(cors({ origin: "*" }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+});
+
+pool.on("error", (err) => {
+  console.error("🔥 Erro inesperado no pool PostgreSQL:", err);
 });
 
 // -------------------------
@@ -18,6 +28,12 @@ const pool = new Pool({
 // -------------------------
 app.get("/", (req, res) => {
   res.send("🔥 API SVS ONLINE");
+});
+
+// Verifica a disponibilidade real do PostgreSQL
+app.get("/health", async (req, res) => {
+  const resultado = await verificarConexaoBanco(pool);
+  res.status(resultado.status).json(resultado.body);
 });
 
 // -------------------------
