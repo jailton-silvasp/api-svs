@@ -14,3 +14,5 @@ jobs:
           node-version: 22
       - name: Check JavaScript syntax
         run: node --check server.js
+      - name: Run isolated health-check tests
+        run: node --test tests/api-health.test.js
