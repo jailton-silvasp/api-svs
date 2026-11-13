@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import pkg from "pg";
+import { verificarConexaoBanco } from "./health-check.js";
 
 const { Pool } = pkg;
 
@@ -31,13 +32,8 @@ app.get("/", (req, res) => {
 
 // Verifica a disponibilidade real do PostgreSQL
 app.get("/health", async (req, res) => {
-  try {
-    await pool.query("SELECT 1");
-    res.status(200).json({ ok: true, database: "connected" });
-  } catch (err) {
-    console.error("🔥 Health check: banco indisponível:", err);
-    res.status(503).json({ ok: false, database: "unavailable" });
-  }
+  const resultado = await verificarConexaoBanco(pool);
+  res.status(resultado.status).json(resultado.body);
 });
 
 // -------------------------
