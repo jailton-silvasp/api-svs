@@ -105,22 +105,25 @@ app.get("/ranking", async (req, res) => {
     const date = req.query.date;
 
     let query = `
-      SELECT 
+      SELECT
         usuario,
         discord_id,
         COALESCE(MAX(avatar_url), '') as avatar_url,
         COALESCE(SUM(valor), 0) as total
       FROM vs_registros
     `;
+    const params = [];
 
     if (period === "day") {
       if (date) {
         query += `
-          WHERE DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') = '${date}'
+          WHERE (criado_em + INTERVAL '1 hour')::date = $1::date
         `;
+        params.push(date);
       } else {
         query += `
-          WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+          WHERE (criado_em + INTERVAL '1 hour')::date =
+            ((NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 hour')::date
         `;
       }
     }
@@ -131,7 +134,7 @@ app.get("/ranking", async (req, res) => {
       LIMIT 10
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, params);
 
     const data = result.rows.map(r => ({
       usuario: r.usuario,
@@ -156,7 +159,8 @@ app.get("/recentes", async (req, res) => {
     const result = await pool.query(`
       SELECT usuario, valor, criado_em
       FROM vs_registros
-      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      WHERE (criado_em + INTERVAL '1 hour')::date =
+        ((NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 hour')::date
       ORDER BY criado_em DESC
       LIMIT 10
     `);
@@ -190,7 +194,14 @@ app.get("/ranking/semanal", async (req, res) => {
           discord_id,
           valor::float as total
         FROM f1_registros
-        WHERE created_at >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        WHERE created_at >= (
+          (
+            date_trunc(
+              'week',
+              (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '4 days'
+            ) + INTERVAL '4 days'
+          ) AT TIME ZONE 'America/Sao_Paulo'
+        )
         ORDER BY discord_id, created_at DESC
       `;
     } else {
@@ -201,7 +212,11 @@ app.get("/ranking/semanal", async (req, res) => {
           COALESCE(MAX(avatar_url), '') as avatar_url,
           COALESCE(SUM(valor), 0)::float as total
         FROM vs_registros
-        WHERE criado_em >= date_trunc('week', NOW() AT TIME ZONE 'America/Sao_Paulo')
+        WHERE (criado_em + INTERVAL '1 hour') >=
+          date_trunc(
+            'week',
+            (NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 hour'
+          )
         GROUP BY usuario, discord_id
         ORDER BY total DESC
         LIMIT 10
@@ -232,7 +247,8 @@ app.get("/dashboard", async (req, res) => {
     const hoje = await pool.query(`
       SELECT COUNT(*) as total
       FROM vs_registros
-      WHERE criado_em >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')
+      WHERE (criado_em + INTERVAL '1 hour')::date =
+        ((NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '1 hour')::date
     `);
 
     const total = await pool.query(`
