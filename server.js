@@ -95,10 +95,11 @@ const HOJE_LOGICO_SQL = `
 
 // Início do ciclo semanal: segunda-feira.
 // No domingo, mantém o ciclo encerrado no sábado até a virada de segunda-feira.
+// O ciclo semanal acompanha a data lógica: domingo às 23h já inicia a nova semana.
 const INICIO_SEMANA_SQL = `
   date_trunc(
     'week',
-    timezone('America/Sao_Paulo', NOW())::date
+    (${HOJE_LOGICO_SQL})::date
   )::date
 `;
 // -------------------------
