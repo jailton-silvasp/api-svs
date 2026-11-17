@@ -1,12 +1,55 @@
 import express from "express";
 import cors from "cors";
 import pkg from "pg";
+import { timingSafeEqual } from "node:crypto";
 
 const { Pool } = pkg;
 
 const app = express();
-app.use(express.json());
-app.use(cors({ origin: "*" }));
+app.use(express.json({ limit: "16kb" }));
+app.use(cors({ origin: "https://dashboard-elo.vercel.app" }));
+
+// Somente o bot autorizado pode gravar registros.
+function autenticarBot(req, res, next) {
+  const segredo = process.env.API_SECRET;
+  const recebido = req.get("x-api-key") || "";
+
+  if (!segredo) {
+    return res.status(503).json({ erro: "Autenticacao da API nao configurada" });
+  }
+
+  const esperadoBuffer = Buffer.from(segredo);
+  const recebidoBuffer = Buffer.from(recebido);
+
+  if (
+    esperadoBuffer.length !== recebidoBuffer.length ||
+    !timingSafeEqual(esperadoBuffer, recebidoBuffer)
+  ) {
+    return res.status(401).json({ erro: "Nao autorizado" });
+  }
+
+  next();
+}
+
+function validarRegistro({ usuario, discord_id, valor, data }) {
+  const numero = Number(valor);
+  const dataValida =
+    typeof data === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(data) &&
+    !Number.isNaN(Date.parse(`${data}T00:00:00Z`));
+
+  return (
+    typeof usuario === "string" &&
+    usuario.trim().length > 0 &&
+    usuario.length <= 100 &&
+    typeof discord_id === "string" &&
+    /^\d{15,22}$/.test(discord_id) &&
+    Number.isFinite(numero) &&
+    numero > 0 &&
+    numero <= 1e13 &&
+    dataValida
+  );
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -67,9 +110,13 @@ const INICIO_SEMANA_SQL = `
 // -------------------------
 // VS REGISTRO (COM AVATAR)
 // -------------------------
-app.post("/vs", async (req, res) => {
+app.post("/vs", autenticarBot, async (req, res) => {
   try {
     const { usuario, discord_id, valor, avatar_url, data } = req.body;
+
+    if (!validarRegistro({ usuario, discord_id, valor, data })) {
+      return res.status(400).json({ erro: "Dados VS invalidos" });
+    }
 
     const numero = Number(valor);
 
@@ -109,7 +156,7 @@ VALUES
 // -------------------------
 // F1 REGISTRO
 // -------------------------
-app.post("/f1", async (req, res) => {
+app.post("/f1", autenticarBot, async (req, res) => {
   try {
     const { usuario, discord_id, valor } = req.body;
 
@@ -117,8 +164,8 @@ app.post("/f1", async (req, res) => {
 
     const numero = Number(valor);
 
-    if (!usuario || !discord_id || isNaN(numero)) {
-      return res.status(400).json({ erro: "Dados inválidos" });
+    if (!validarRegistro({ usuario, discord_id, valor, data: req.body.data })) {
+      return res.status(400).json({ erro: "Dados F1 invalidos" });
     }
 
     await pool.query(
@@ -138,7 +185,7 @@ app.post("/f1", async (req, res) => {
 
   } catch (err) {
     console.error("🔥 ERRO F1:", err);
-    res.status(500).json({ erro: err.message });
+    res.status(500).json({ erro: "Erro ao salvar F1" });
   }
 });
 
