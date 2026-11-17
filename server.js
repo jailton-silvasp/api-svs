@@ -189,20 +189,24 @@ app.get("/ranking/semanal", async (req, res) => {
     if (tipo === "f1") {
       // 🔥 AJUSTE: pega apenas o ÚLTIMO registro da semana por jogador
       query = `
-        SELECT DISTINCT ON (discord_id)
-          usuario,
-          discord_id,
-          valor::float as total
-        FROM f1_registros
-        WHERE created_at >= (
-          (
-            date_trunc(
-              'week',
-              (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '4 days'
-            ) + INTERVAL '4 days'
-          ) AT TIME ZONE 'America/Sao_Paulo'
-        )
-        ORDER BY discord_id, created_at DESC
+        SELECT *
+        FROM (
+          SELECT DISTINCT ON (discord_id)
+            usuario,
+            discord_id,
+            valor::float as total
+          FROM f1_registros
+          WHERE created_at >= (
+            (
+              date_trunc(
+                'week',
+                (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '4 days'
+              ) + INTERVAL '4 days'
+            ) AT TIME ZONE 'America/Sao_Paulo'
+          )
+          ORDER BY discord_id, created_at DESC
+        ) AS ranking_f1
+        ORDER BY total DESC
       `;
     } else {
       query = `
