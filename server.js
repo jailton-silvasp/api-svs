@@ -307,7 +307,7 @@ app.get("/ranking/semanal", async (req, res) => {
       COALESCE(perfil_atual.avatar_url, '') AS avatar_url,
       totais_semanais.total
     FROM totais_semanais
-    JOIN perfil_atual USING (discord_id)
+    LEFT JOIN perfil_atual USING (discord_id)
     ORDER BY totais_semanais.total DESC
   `;
 }
@@ -352,7 +352,7 @@ app.get("/dashboard", async (req, res) => {
         COALESCE(perfil_atual.avatar_url, '') AS avatar_url,
         totais_gerais.total
       FROM totais_gerais
-      JOIN perfil_atual USING (discord_id)
+      LEFT JOIN perfil_atual USING (discord_id)
       ORDER BY totais_gerais.total DESC
     `);
 
