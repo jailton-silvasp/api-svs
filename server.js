@@ -183,7 +183,7 @@ app.get("/ranking", async (req, res) => {
       criado_em
     FROM vs_registros
     ${whereClause}
-    ORDER BY discord_id, criado_em DESC
+    ORDER BY discord_id, (avatar_url IS NOT NULL AND avatar_url <> '') DESC, criado_em DESC
   ) t
   ORDER BY total DESC
 `;
@@ -236,7 +236,7 @@ app.get("/ranking", async (req, res) => {
 app.get("/recentes", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT usuario, valor, criado_em
+      SELECT usuario, valor, criado_em, avatar_url
       FROM vs_registros
       WHERE data = (${HOJE_LOGICO_SQL})::date
       ORDER BY criado_em DESC
@@ -246,7 +246,8 @@ app.get("/recentes", async (req, res) => {
     res.json(result.rows.map(r => ({
       usuario: r.usuario,
       valor: Number(r.valor),
-      criado_em: r.criado_em
+      criado_em: r.criado_em,
+      avatar_url: r.avatar_url || null
     })));
 
   } catch (err) {
@@ -266,12 +267,24 @@ app.get("/ranking/semanal", async (req, res) => {
 
     if (tipo === "f1") {
   query = `
-    SELECT DISTINCT ON (discord_id)
-      usuario,
-      discord_id,
-      valor::float as total
-    FROM f1_registros
-    ORDER BY discord_id, created_at DESC
+    WITH perfil_atual AS (
+      SELECT DISTINCT ON (discord_id) discord_id, avatar_url
+      FROM vs_registros
+      WHERE avatar_url IS NOT NULL AND TRIM(avatar_url) <> ''
+      ORDER BY discord_id, criado_em DESC
+    ),
+    ultimos_f1 AS (
+      SELECT DISTINCT ON (discord_id)
+        usuario, discord_id, valor::float AS total
+      FROM f1_registros
+      ORDER BY discord_id, created_at DESC
+    )
+    SELECT ultimos_f1.usuario, ultimos_f1.discord_id,
+      COALESCE(perfil_atual.avatar_url, '') AS avatar_url,
+      ultimos_f1.total
+    FROM ultimos_f1
+    LEFT JOIN perfil_atual USING (discord_id)
+    ORDER BY ultimos_f1.total DESC
   `;
     } else {
   query = `
@@ -329,6 +342,7 @@ app.get("/dashboard", async (req, res) => {
       perfil_atual AS (
         SELECT DISTINCT ON (discord_id) discord_id, usuario, avatar_url
         FROM vs_registros
+        WHERE avatar_url IS NOT NULL AND TRIM(avatar_url) <> ''
         ORDER BY discord_id, criado_em DESC
       )
       SELECT
@@ -343,12 +357,22 @@ app.get("/dashboard", async (req, res) => {
 
     // Última marcação F1 de cada jogador, preservada até uma nova marcação.
     const f1 = await pool.query(`
-      SELECT usuario, discord_id, valor::float AS total
-      FROM (
+      WITH perfil_atual AS (
+        SELECT DISTINCT ON (discord_id) discord_id, avatar_url
+        FROM vs_registros
+        WHERE avatar_url IS NOT NULL AND TRIM(avatar_url) <> ''
+        ORDER BY discord_id, criado_em DESC
+      ),
+      ultimos_f1 AS (
         SELECT DISTINCT ON (discord_id) usuario, discord_id, valor, created_at
         FROM f1_registros
         ORDER BY discord_id, created_at DESC
-      ) ultimos
+      )
+      SELECT ultimos_f1.usuario, ultimos_f1.discord_id,
+        COALESCE(perfil_atual.avatar_url, '') AS avatar_url,
+        ultimos_f1.valor::float AS total
+      FROM ultimos_f1
+      LEFT JOIN perfil_atual USING (discord_id)
       ORDER BY total DESC
     `);
 
