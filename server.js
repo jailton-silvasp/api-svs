@@ -205,7 +205,7 @@ app.get("/ranking", async (req, res) => {
       avatar_url,
       criado_em
     FROM vs_registros
-    ORDER BY discord_id, criado_em DESC
+    ORDER BY discord_id, (avatar_url IS NOT NULL AND avatar_url <> '') DESC, criado_em DESC
   ) t
   ORDER BY total DESC
 `;
@@ -298,6 +298,7 @@ app.get("/ranking/semanal", async (req, res) => {
     perfil_atual AS (
       SELECT DISTINCT ON (discord_id) discord_id, usuario, avatar_url
       FROM vs_registros
+      WHERE avatar_url IS NOT NULL AND TRIM(avatar_url) <> ''
       ORDER BY discord_id, criado_em DESC
     )
     SELECT
@@ -395,6 +396,7 @@ app.get("/dashboard", async (req, res) => {
       f1: f1.rows.map(r => ({
         usuario: r.usuario,
         discord_id: r.discord_id,
+        avatar_url: r.avatar_url || null,
         total: Number(r.total || 0)
       })),
       recentes: recentes.rows.map(r => ({
