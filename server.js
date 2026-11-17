@@ -341,8 +341,10 @@ app.get("/ranking/semanal", async (req, res) => {
     perfil_atual AS (
       SELECT DISTINCT ON (discord_id) discord_id, usuario, avatar_url
       FROM vs_registros
-      WHERE avatar_url IS NOT NULL AND TRIM(avatar_url) <> ''
-      ORDER BY discord_id, criado_em DESC
+      ORDER BY
+        discord_id,
+        (avatar_url IS NOT NULL AND TRIM(avatar_url) <> '') DESC,
+        criado_em DESC
     )
     SELECT
       perfil_atual.usuario,
