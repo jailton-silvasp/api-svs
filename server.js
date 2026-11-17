@@ -273,10 +273,25 @@ app.get("/ranking/semanal", async (req, res) => {
       WHERE avatar_url IS NOT NULL AND TRIM(avatar_url) <> ''
       ORDER BY discord_id, criado_em DESC
     ),
+    f1_da_semana AS (
+      SELECT
+        usuario,
+        discord_id,
+        valor,
+        COALESCE(data, timezone('America/Sao_Paulo', created_at)::date) AS data_registro,
+        created_at
+      FROM f1_registros
+      WHERE COALESCE(data, timezone('America/Sao_Paulo', created_at)::date)
+        >= (${INICIO_SEMANA_SQL})
+        AND COALESCE(data, timezone('America/Sao_Paulo', created_at)::date)
+        < ((${INICIO_SEMANA_SQL}) + INTERVAL '6 days')::date
+    ),
     ultimos_f1 AS (
       SELECT DISTINCT ON (discord_id)
-        usuario, discord_id, valor::float AS total
-      FROM f1_registros
+        usuario,
+        discord_id,
+        valor::float AS total
+      FROM f1_da_semana
       ORDER BY discord_id, created_at DESC
     )
     SELECT ultimos_f1.usuario, ultimos_f1.discord_id,
