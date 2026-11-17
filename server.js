@@ -56,7 +56,8 @@ const HOJE_LOGICO_SQL = `
   END
 `;
 
-// Início da semana baseado na data lógica
+// Início do ciclo semanal: segunda-feira.
+// No domingo, mantém o ciclo encerrado no sábado até a virada de segunda-feira.
 const INICIO_SEMANA_SQL = `
   date_trunc(
     'week',
@@ -274,15 +275,26 @@ app.get("/ranking/semanal", async (req, res) => {
   `;
     } else {
   query = `
+    WITH totais_semanais AS (
+      SELECT discord_id, COALESCE(SUM(valor), 0)::float AS total
+      FROM vs_registros
+      WHERE data >= (${INICIO_SEMANA_SQL})
+        AND data < ((${INICIO_SEMANA_SQL}) + INTERVAL '6 days')::date
+      GROUP BY discord_id
+    ),
+    perfil_atual AS (
+      SELECT DISTINCT ON (discord_id) discord_id, usuario, avatar_url
+      FROM vs_registros
+      ORDER BY discord_id, criado_em DESC
+    )
     SELECT
-      usuario,
-      discord_id,
-      COALESCE(MAX(avatar_url), '') as avatar_url,
-      COALESCE(SUM(valor), 0)::float as total
-    FROM vs_registros
-    WHERE data >= (${INICIO_SEMANA_SQL})
-    GROUP BY usuario, discord_id
-    ORDER BY total DESC
+      perfil_atual.usuario,
+      totais_semanais.discord_id,
+      COALESCE(perfil_atual.avatar_url, '') AS avatar_url,
+      totais_semanais.total
+    FROM totais_semanais
+    JOIN perfil_atual USING (discord_id)
+    ORDER BY totais_semanais.total DESC
   `;
 }
 
@@ -307,32 +319,55 @@ app.get("/ranking/semanal", async (req, res) => {
 app.get("/dashboard", async (req, res) => {
   try {
 
-    // Conta registros do "hoje lógico"
-    const hoje = await pool.query(`
-      SELECT COUNT(*) as total
-      FROM vs_registros
-      WHERE data = (${HOJE_LOGICO_SQL})::date
-    `);
-
-    const total = await pool.query(`
-      SELECT COUNT(*) as total FROM vs_registros
-    `);
-
-    const ranking = await pool.query(`
-      SELECT 
-        usuario, 
-        SUM(valor)::float as total
-      FROM vs_registros
-      GROUP BY usuario
+    // Última marcação VS de cada jogador (base dos indicadores gerais).
+    const vs = await pool.query(`
+      SELECT usuario, discord_id, COALESCE(avatar_url, '') AS avatar_url, valor::float AS total
+      FROM (
+        SELECT DISTINCT ON (discord_id) usuario, discord_id, avatar_url, valor, criado_em
+        FROM vs_registros
+        ORDER BY discord_id, criado_em DESC
+      ) ultimos
       ORDER BY total DESC
     `);
 
+    // Última marcação F1 de cada jogador, preservada até uma nova marcação.
+    const f1 = await pool.query(`
+      SELECT usuario, discord_id, valor::float AS total
+      FROM (
+        SELECT DISTINCT ON (discord_id) usuario, discord_id, valor, created_at
+        FROM f1_registros
+        ORDER BY discord_id, created_at DESC
+      ) ultimos
+      ORDER BY total DESC
+    `);
+
+    // Registros recentes do dia lógico atual.
+    const recentes = await pool.query(`
+      SELECT usuario, valor, data, criado_em, avatar_url
+      FROM vs_registros
+      WHERE data = (${HOJE_LOGICO_SQL})::date
+      ORDER BY criado_em DESC
+      LIMIT 10
+    `);
+
     res.json({
-      hoje: Number(hoje.rows[0].total),
-      total: Number(total.rows[0].total),
-      ranking: ranking.rows.map(r => ({
+      vs: vs.rows.map(r => ({
         usuario: r.usuario,
+        discord_id: r.discord_id,
+        avatar_url: r.avatar_url || null,
         total: Number(r.total || 0)
+      })),
+      f1: f1.rows.map(r => ({
+        usuario: r.usuario,
+        discord_id: r.discord_id,
+        total: Number(r.total || 0)
+      })),
+      recentes: recentes.rows.map(r => ({
+        usuario: r.usuario,
+        valor: Number(r.valor || 0),
+        data: r.data,
+        criado_em: r.criado_em,
+        avatar_url: r.avatar_url || null
       }))
     });
 
