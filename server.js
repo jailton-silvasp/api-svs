@@ -56,14 +56,13 @@ const HOJE_LOGICO_SQL = `
   END
 `;
 
-// Início do ciclo semanal: segunda-feira a sábado.
-// Quando a data lógica cair no domingo, o próximo ciclo começa na segunda seguinte.
+// Início do ciclo semanal: segunda-feira.
+// No domingo, mantém o ciclo encerrado no sábado até a virada de segunda-feira.
 const INICIO_SEMANA_SQL = `
-  CASE
-    WHEN EXTRACT(DOW FROM (${HOJE_LOGICO_SQL})::date) = 0
-      THEN (date_trunc('week', (${HOJE_LOGICO_SQL})::date) + INTERVAL '7 days')::date
-    ELSE date_trunc('week', (${HOJE_LOGICO_SQL})::date)::date
-  END
+  date_trunc(
+    'week',
+    (${HOJE_LOGICO_SQL})::date
+  )::date
 `;
 // -------------------------
 // VS REGISTRO (COM AVATAR)
