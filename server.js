@@ -31,13 +31,8 @@ function autenticarBot(req, res, next) {
   next();
 }
 
-function validarRegistro({ usuario, discord_id, valor, data }) {
+function validarRegistro({ usuario, discord_id, valor }) {
   const numero = Number(valor);
-  const dataValida =
-    typeof data === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(data) &&
-    !Number.isNaN(Date.parse(`${data}T00:00:00Z`));
-
   return (
     typeof usuario === "string" &&
     usuario.trim().length > 0 &&
@@ -46,8 +41,7 @@ function validarRegistro({ usuario, discord_id, valor, data }) {
     /^\d{15,22}$/.test(discord_id) &&
     Number.isFinite(numero) &&
     numero > 0 &&
-    numero <= 1e13 &&
-    dataValida
+    numero <= 1e13
   );
 }
 
@@ -104,7 +98,7 @@ const HOJE_LOGICO_SQL = `
 const INICIO_SEMANA_SQL = `
   date_trunc(
     'week',
-    (${HOJE_LOGICO_SQL})::date
+    timezone('America/Sao_Paulo', NOW())::date
   )::date
 `;
 // -------------------------
@@ -112,9 +106,9 @@ const INICIO_SEMANA_SQL = `
 // -------------------------
 app.post("/vs", autenticarBot, async (req, res) => {
   try {
-    const { usuario, discord_id, valor, avatar_url, data } = req.body;
+    const { usuario, discord_id, valor, avatar_url } = req.body;
 
-    if (!validarRegistro({ usuario, discord_id, valor, data })) {
+    if (!validarRegistro({ usuario, discord_id, valor })) {
       return res.status(400).json({ erro: "Dados VS invalidos" });
     }
 
@@ -133,15 +127,14 @@ INSERT INTO vs_registros
 )
 VALUES
 (
- $1,$2,$3,$4,$5,NOW()
+ $1,$2,$3,$4,(${HOJE_LOGICO_SQL})::date,NOW()
 )
 `,
 [
  usuario,
  discord_id,
  numero,
- avatar_url || null,
- data
+ avatar_url || null
 ]
 );
 
@@ -164,20 +157,18 @@ app.post("/f1", autenticarBot, async (req, res) => {
 
     const numero = Number(valor);
 
-    if (!validarRegistro({ usuario, discord_id, valor, data: req.body.data })) {
+    if (!validarRegistro({ usuario, discord_id, valor })) {
       return res.status(400).json({ erro: "Dados F1 invalidos" });
     }
 
     await pool.query(
       `INSERT INTO f1_registros 
        (usuario, discord_id, valor, semana, data, created_at, criado_em)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+       VALUES ($1, $2, $3, EXTRACT(WEEK FROM (${HOJE_LOGICO_SQL})::date)::int, (${HOJE_LOGICO_SQL})::date, NOW(), NOW())`,
       [
         usuario,
         discord_id,
-        numero,
-        req.body.semana || null,
-        req.body.data || null
+        numero
       ]
     );
 
