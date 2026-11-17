@@ -319,15 +319,26 @@ app.get("/ranking/semanal", async (req, res) => {
 app.get("/dashboard", async (req, res) => {
   try {
 
-    // Última marcação VS de cada jogador (base dos indicadores gerais).
+    // Total histórico de VS por jogador, mantendo o avatar do registro mais recente.
     const vs = await pool.query(`
-      SELECT usuario, discord_id, COALESCE(avatar_url, '') AS avatar_url, valor::float AS total
-      FROM (
-        SELECT DISTINCT ON (discord_id) usuario, discord_id, avatar_url, valor, criado_em
+      WITH totais_gerais AS (
+        SELECT discord_id, COALESCE(SUM(valor), 0)::float AS total
+        FROM vs_registros
+        GROUP BY discord_id
+      ),
+      perfil_atual AS (
+        SELECT DISTINCT ON (discord_id) discord_id, usuario, avatar_url
         FROM vs_registros
         ORDER BY discord_id, criado_em DESC
-      ) ultimos
-      ORDER BY total DESC
+      )
+      SELECT
+        perfil_atual.usuario,
+        totais_gerais.discord_id,
+        COALESCE(perfil_atual.avatar_url, '') AS avatar_url,
+        totais_gerais.total
+      FROM totais_gerais
+      JOIN perfil_atual USING (discord_id)
+      ORDER BY totais_gerais.total DESC
     `);
 
     // Última marcação F1 de cada jogador, preservada até uma nova marcação.
